@@ -12,6 +12,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, session *model.Session) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error)
 	Revoke(ctx context.Context, sessionID string, reason string) error
+	UpdateActivity(ctx context.Context, sessionID string) error
 }
 
 type PostgresSessionRepository struct {
@@ -67,6 +68,13 @@ func (r *PostgresSessionRepository) FindByTokenHash(ctx context.Context, tokenHa
 func (r *PostgresSessionRepository) Revoke(ctx context.Context, sessionID string, reason string) error {
 	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $1 WHERE id = $2`
 	_, err := r.db.ExecContext(ctx, query, reason, sessionID)
+	return err
+}
+
+func (r *PostgresSessionRepository) UpdateActivity(ctx context.Context, sessionID string) error {
+	query := `UPDATE sessions SET last_activity_at = now(), idle_timeout_at = now() + interval '30 minutes', updated_at = now() 
+	          WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, sessionID)
 	return err
 }
 

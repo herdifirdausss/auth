@@ -382,7 +382,13 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 	}
 
 	// 12. Redis Cache
-	s.sessionCache.Set(ctx, session)
+	s.sessionCache.Set(ctx, sessionHash, &redis.CachedSession{
+		SessionID:     session.ID,
+		UserID:        session.UserID,
+		MFAVerified:   session.MFAVerified,
+		ExpiresAt:     session.ExpiresAt,
+		IdleTimeoutAt: session.IdleTimeoutAt,
+	})
 
 	// 13. Security Event
 	s.eventRepo.Create(ctx, &model.SecurityEvent{
