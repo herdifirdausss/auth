@@ -14,6 +14,9 @@ type UserRepository interface {
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
 	SetVerified(ctx context.Context, tx *sql.Tx, userID string) error
+	IncrementFailedLogin(ctx context.Context, userID string) (int, error)
+	SuspendUser(ctx context.Context, userID string) error
+	ResetFailedLoginAndUpdateLastLogin(ctx context.Context, userID string, ip string) error
 }
 
 type PostgresUserRepository struct {
@@ -87,4 +90,25 @@ func (r *PostgresUserRepository) SetVerified(ctx context.Context, tx *sql.Tx, us
 		return fmt.Errorf("error setting user as verified: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresUserRepository) IncrementFailedLogin(ctx context.Context, userID string) (int, error) {
+	query := `UPDATE users SET failed_login_count = failed_login_count + 1, last_failed_login_at = now() 
+	          WHERE id = $1 RETURNING failed_login_count`
+	var count int
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&count)
+	return count, err
+}
+
+func (r *PostgresUserRepository) SuspendUser(ctx context.Context, userID string) error {
+	query := `UPDATE users SET is_suspended = true, updated_at = now() WHERE id = $1`
+	_, err := r.db.ExecContext(ctx, query, userID)
+	return err
+}
+
+func (r *PostgresUserRepository) ResetFailedLoginAndUpdateLastLogin(ctx context.Context, userID string, ip string) error {
+	query := `UPDATE users SET failed_login_count = 0, last_login_at = now(), last_login_ip = $1, updated_at = now() 
+	          WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, ip, userID)
+	return err
 }

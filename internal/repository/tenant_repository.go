@@ -35,6 +35,7 @@ func (r *PostgresTenantRepository) FindBySlug(ctx context.Context, slug string) 
 
 type TenantMembershipRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, membership *model.TenantMembership) error
+	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)
 }
 
 type PostgresTenantMembershipRepository struct {
@@ -61,4 +62,17 @@ func (r *PostgresTenantMembershipRepository) Create(ctx context.Context, tx *sql
 		return fmt.Errorf("error creating membership: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresTenantMembershipRepository) FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error) {
+	query := `SELECT id, user_id, tenant_id, status, created_at FROM tenant_memberships WHERE user_id = $1 AND status = 'active' LIMIT 1`
+	var m model.TenantMembership
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(&m.ID, &m.UserID, &m.TenantID, &m.Status, &m.CreatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error finding active membership: %w", err)
+	}
+	return &m, nil
 }

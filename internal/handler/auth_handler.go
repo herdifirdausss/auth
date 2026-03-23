@@ -84,6 +84,58 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req model.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	ipAddress := h.getIPAddress(r)
+	userAgent := r.UserAgent()
+
+	res, err := h.authService.Login(r.Context(), &req, ipAddress, userAgent)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid email or password") {
+			h.respondError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "too many login attempts") {
+			h.respondError(w, http.StatusTooManyRequests, err.Error())
+			return
+		}
+		if strings.Contains(err.Error(), "suspended") {
+			h.respondError(w, http.StatusForbidden, err.Error())
+			return
+		}
+		h.respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	if res.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    res.RefreshToken,
+			Path:     "/auth",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   2592000, // 30 days
+		})
+		res.RefreshToken = "" // Hide from JSON
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "success",
+		"data":   res,
+	})
+}
+
 func (h *AuthHandler) respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

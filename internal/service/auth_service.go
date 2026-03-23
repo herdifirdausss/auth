@@ -13,11 +13,13 @@ import (
 	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/herdifirdausss/auth/internal/validator"
+	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 )
 
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
 	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error
+	Login(ctx context.Context, req *model.LoginRequest, ip string, userAgent string) (*model.LoginResponse, error)
 }
 
 type AuthServiceImpl struct {
@@ -28,7 +30,13 @@ type AuthServiceImpl struct {
 	eventRepo       repository.SecurityEventRepository
 	tenantRepo      repository.TenantRepository
 	membershipRepo  repository.TenantMembershipRepository
+	sessionRepo     repository.SessionRepository
+	refreshTokenRepo repository.RefreshTokenRepository
+	mfaRepo         repository.MFARepository
 	hasher          security.PasswordHasher
+	rateLimiter    *redis.RateLimiter
+	sessionCache   *redis.SessionCache
+	jwtConfig      security.JWTConfig
 }
 
 func NewAuthService(
@@ -39,17 +47,29 @@ func NewAuthService(
 	eventRepo repository.SecurityEventRepository,
 	tenantRepo repository.TenantRepository,
 	membershipRepo repository.TenantMembershipRepository,
+	sessionRepo repository.SessionRepository,
+	refreshTokenRepo repository.RefreshTokenRepository,
+	mfaRepo repository.MFARepository,
 	hasher security.PasswordHasher,
+	rateLimiter *redis.RateLimiter,
+	sessionCache *redis.SessionCache,
+	jwtConfig security.JWTConfig,
 ) *AuthServiceImpl {
 	return &AuthServiceImpl{
-		db:             db,
-		userRepo:       userRepo,
-		credRepo:       credRepo,
-		tokenRepo:      tokenRepo,
-		eventRepo:      eventRepo,
-		tenantRepo:     tenantRepo,
-		membershipRepo: membershipRepo,
-		hasher:         hasher,
+		db:              db,
+		userRepo:        userRepo,
+		credRepo:        credRepo,
+		tokenRepo:       tokenRepo,
+		eventRepo:       eventRepo,
+		tenantRepo:      tenantRepo,
+		membershipRepo:  membershipRepo,
+		sessionRepo:     sessionRepo,
+		refreshTokenRepo: refreshTokenRepo,
+		mfaRepo:         mfaRepo,
+		hasher:          hasher,
+		rateLimiter:    rateLimiter,
+		sessionCache:   sessionCache,
+		jwtConfig:      jwtConfig,
 	}
 }
 
@@ -217,4 +237,168 @@ func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAd
 	s.eventRepo.Create(ctx, event)
 
 	return nil
+}
+
+func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip string, userAgent string) (*model.LoginResponse, error) {
+	// 1. Rate Limit IP
+	ipLimitKey := fmt.Sprintf("rate_limit:login:ip:%s", ip)
+	if allowed, err := s.rateLimiter.Check(ctx, ipLimitKey, 20, 15*time.Minute); err != nil || !allowed {
+		return nil, fmt.Errorf("too many login attempts from this IP")
+	}
+
+	// 2. Rate Limit User
+	userLimitKey := fmt.Sprintf("rate_limit:login:user:%s", strings.ToLower(req.Email))
+	if allowed, err := s.rateLimiter.Check(ctx, userLimitKey, 10, 15*time.Minute); err != nil || !allowed {
+		return nil, fmt.Errorf("too many login attempts for this user")
+	}
+
+	// 3. Find User
+	user, err := s.userRepo.FindByEmail(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, fmt.Errorf("invalid email or password") // generic
+	}
+
+	// 4. Check Suspended
+	if user.IsSuspended {
+		return nil, fmt.Errorf("account has been suspended")
+	}
+
+	// 5. Find Credentials
+	cred, err := s.credRepo.FindByUserID(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if cred == nil {
+		return nil, fmt.Errorf("invalid email or password")
+	}
+
+	// 6. Verify Password
+	match, err := s.hasher.Verify(req.Password, cred.PasswordHash, cred.PasswordSalt)
+	if err != nil || !match {
+		// Log Failed Login
+		count, _ := s.userRepo.IncrementFailedLogin(ctx, user.ID)
+		if count >= 10 {
+			s.userRepo.SuspendUser(ctx, user.ID)
+		}
+		
+		s.eventRepo.Create(ctx, &model.SecurityEvent{
+			UserID:    &user.ID,
+			EventType: "auth.login_failed",
+			Severity:  "warning",
+			Details:   "Failed login attempt",
+			IPAddress: ip,
+			UserAgent: userAgent,
+		})
+		
+		return nil, fmt.Errorf("invalid email or password")
+	}
+
+	// 7. Successful Login
+	s.userRepo.ResetFailedLoginAndUpdateLastLogin(ctx, user.ID, ip)
+
+	// 8. Membership Check
+	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, user.ID)
+	var tenantID *string
+	var membershipID *string
+	if membership != nil {
+		tenantID = &membership.TenantID
+		membershipID = &membership.ID
+	}
+
+	// 9. MFA Check
+	mfa, _ := s.mfaRepo.FindPrimaryActive(ctx, user.ID)
+	if mfa != nil {
+		mfaToken, _ := security.GenerateMFAToken(s.jwtConfig, user.ID, 5*time.Minute)
+		return &model.LoginResponse{
+			MFARequired: true,
+			MFAToken:    mfaToken,
+		}, nil
+	}
+
+	// 10. Session & Tokens
+	sessionToken, _ := security.GenerateSecureToken(32)
+	sessionHash := security.HashToken(sessionToken)
+	
+	refreshToken, _ := security.GenerateSecureToken(32)
+	refreshHash := security.HashToken(refreshToken)
+	familyID, _ := security.GenerateSecureToken(16)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+
+	session := &model.Session{
+		UserID:            user.ID,
+		TenantID:          tenantID,
+		MembershipID:      membershipID,
+		TokenHash:         sessionHash,
+		IPAddress:         ip,
+		UserAgent:         userAgent,
+		DeviceFingerprint: req.DeviceFingerprint,
+		DeviceName:        req.DeviceName,
+		ExpiresAt:         time.Now().Add(7 * 24 * time.Hour),
+		IdleTimeoutAt:     time.Now().Add(30 * time.Minute),
+	}
+	if err := s.sessionRepo.Create(ctx, tx, session); err != nil {
+		return nil, err
+	}
+
+	rf := &model.RefreshToken{
+		SessionID:         session.ID,
+		UserID:            user.ID,
+		TokenHash:         refreshHash,
+		FamilyID:          familyID,
+		Generation:        1,
+		IPAddress:         ip,
+		DeviceFingerprint: req.DeviceFingerprint,
+		ExpiresAt:         time.Now().Add(30 * 24 * time.Hour),
+	}
+	if err := s.refreshTokenRepo.Create(ctx, tx, rf); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+
+	// 11. JWT
+	claims := security.JWTClaims{
+		Sub: user.ID,
+		Sid: session.ID,
+	}
+	if tenantID != nil {
+		claims.Tid = *tenantID
+	}
+	// Add roles if needed...
+	
+	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
+	if err != nil {
+		return nil, err
+	}
+
+	// 12. Redis Cache
+	s.sessionCache.Set(ctx, session)
+
+	// 13. Security Event
+	s.eventRepo.Create(ctx, &model.SecurityEvent{
+		UserID:    &user.ID,
+		TenantID:  tenantID,
+		EventType: "auth.login_success",
+		Severity:  "info",
+		Details:   "User logged in successfully",
+		IPAddress: ip,
+		UserAgent: userAgent,
+	})
+
+	return &model.LoginResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(s.jwtConfig.AccessExpiry.Seconds()),
+	}, nil
 }

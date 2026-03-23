@@ -11,6 +11,7 @@ func NewRouter(authHandler *handler.AuthHandler) *http.ServeMux {
 
 	mux.HandleFunc("/auth/register", authHandler.Register)
 	mux.HandleFunc("/auth/verify-email", authHandler.VerifyEmail)
+	mux.HandleFunc("/auth/login", authHandler.Login)
 
 	return mux
 }
