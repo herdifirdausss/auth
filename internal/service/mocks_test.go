@@ -97,6 +97,11 @@ func (m *mockSessionRepo) UpdateActivity(ctx context.Context, id string) error {
 	return args.Error(0)
 }
 
+func (m *mockSessionRepo) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error {
+	args := m.Called(ctx, tx, userID, reason)
+	return args.Error(0)
+}
+
 type mockRefreshTokenRepo struct {
 	mock.Mock
 }
@@ -139,6 +144,141 @@ type mockSecurityEventRepo struct {
 }
 
 func (m *mockSecurityEventRepo) Create(ctx context.Context, event *model.SecurityEvent) error {
-	args := m.Called(ctx, event)
+	args := m.Called(event)
 	return args.Error(0)
+}
+
+type mockPasswordHistoryRepo struct {
+	mock.Mock
+}
+
+func (m *mockPasswordHistoryRepo) GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error) {
+	args := m.Called(ctx, userID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
+func (m *mockPasswordHistoryRepo) Create(ctx context.Context, tx *sql.Tx, userID, passwordHash string) error {
+	args := m.Called(ctx, tx, userID, passwordHash)
+	return args.Error(0)
+}
+
+func (m *mockPasswordHistoryRepo) Cleanup(ctx context.Context, userID string, limit int) error {
+	args := m.Called(ctx, userID, limit)
+	return args.Error(0)
+}
+
+type mockUserRepo struct {
+	mock.Mock
+}
+
+func (m *mockUserRepo) Create(ctx context.Context, tx *sql.Tx, user *model.User) error {
+	args := m.Called(tx, user)
+	return args.Error(0)
+}
+
+func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*model.User, error) {
+	args := m.Called(ctx, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.User), args.Error(1)
+}
+
+func (m *mockUserRepo) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	args := m.Called(ctx, email)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockUserRepo) ExistsByUsername(ctx context.Context, username string) (bool, error) {
+	args := m.Called(ctx, username)
+	return args.Bool(0), args.Error(1)
+}
+
+func (m *mockUserRepo) SetVerified(ctx context.Context, tx *sql.Tx, userID string) error {
+	args := m.Called(ctx, tx, userID)
+	return args.Error(0)
+}
+
+func (m *mockUserRepo) IncrementFailedLogin(ctx context.Context, userID string) (int, error) {
+	args := m.Called(ctx, userID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *mockUserRepo) SuspendUser(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
+func (m *mockUserRepo) ResetFailedLoginAndUpdateLastLogin(ctx context.Context, userID string, ip string) error {
+	args := m.Called(ctx, userID, ip)
+	return args.Error(0)
+}
+
+func (m *mockUserRepo) FindByID(ctx context.Context, id string) (*model.User, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.User), args.Error(1)
+}
+
+type mockSecurityTokenRepo struct {
+	mock.Mock
+}
+
+func (m *mockSecurityTokenRepo) Create(ctx context.Context, token *model.SecurityToken) error {
+	args := m.Called(ctx, token)
+	return args.Error(0)
+}
+
+func (m *mockSecurityTokenRepo) FindValidToken(ctx context.Context, hash, tokenType string) (*model.SecurityToken, error) {
+	args := m.Called(ctx, hash, tokenType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.SecurityToken), args.Error(1)
+}
+
+func (m *mockSecurityTokenRepo) MarkUsed(ctx context.Context, tx *sql.Tx, id string) error {
+	args := m.Called(ctx, tx, id)
+	return args.Error(0)
+}
+
+type mockCredentialRepo struct {
+	mock.Mock
+}
+
+func (m *mockCredentialRepo) Create(ctx context.Context, tx *sql.Tx, cred *model.UserCredential) error {
+	args := m.Called(cred)
+	return args.Error(0)
+}
+
+func (m *mockCredentialRepo) FindByUserID(ctx context.Context, userID string) (*model.UserCredential, error) {
+	args := m.Called(userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.UserCredential), args.Error(1)
+}
+
+func (m *mockCredentialRepo) UpdatePassword(ctx context.Context, tx *sql.Tx, userID, hash, salt string) error {
+	args := m.Called(ctx, tx, userID, hash, salt)
+	return args.Error(0)
+}
+
+type mockPasswordHasher struct {
+	mock.Mock
+}
+
+func (m *mockPasswordHasher) Hash(password string) (string, string, error) {
+	args := m.Called(password)
+	return args.String(0), args.String(1), args.Error(2)
+}
+
+func (m *mockPasswordHasher) Verify(password, hash, salt string) (bool, error) {
+	args := m.Called(password, hash, salt)
+	return args.Bool(0), args.Error(1)
 }

@@ -189,6 +189,63 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (h *AuthHandler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req model.ForgotPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	ipAddress := h.getIPAddress(r)
+	userAgent := r.UserAgent()
+
+	// Always return 200 for security (anti-enumeration)
+	_ = h.authService.ForgotPassword(r.Context(), req.Email, ipAddress, userAgent)
+
+	h.respondJSON(w, http.StatusOK, map[string]string{
+		"status":  "success",
+		"message": "If the email exists, you'll receive a reset link",
+	})
+}
+
+func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req model.ResetPasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.respondError(w, http.StatusBadRequest, "Invalid JSON body")
+		return
+	}
+
+	ipAddress := h.getIPAddress(r)
+	userAgent := r.UserAgent()
+
+	err := h.authService.ResetPassword(r.Context(), req.Token, req.NewPassword, ipAddress, userAgent)
+	if err != nil {
+		if strings.Contains(err.Error(), "invalid or expired") || 
+		   strings.Contains(err.Error(), "weak password") || 
+		   strings.Contains(err.Error(), "recently used") {
+			h.respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		h.respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]string{
+		"status":  "success",
+		"message": "Password has been reset successfully",
+	})
+}
+
 func (h *AuthHandler) respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

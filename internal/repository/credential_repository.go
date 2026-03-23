@@ -11,6 +11,7 @@ import (
 type CredentialRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, cred *model.UserCredential) error
 	FindByUserID(ctx context.Context, userID string) (*model.UserCredential, error)
+	UpdatePassword(ctx context.Context, tx *sql.Tx, userID, hash, salt string) error
 }
 
 type PostgresCredentialRepository struct {
@@ -56,6 +57,24 @@ func (r *PostgresCredentialRepository) FindByUserID(ctx context.Context, userID 
 		return nil, fmt.Errorf("error finding credential by user id: %w", err)
 	}
 	return &cred, nil
+}
+
+func (r *PostgresCredentialRepository) UpdatePassword(ctx context.Context, tx *sql.Tx, userID, hash, salt string) error {
+	query := `UPDATE user_credentials 
+	          SET password_hash = $2, password_salt = $3, last_changed_at = now(), change_count = change_count + 1 
+	          WHERE user_id = $1`
+	
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, userID, hash, salt)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, userID, hash, salt)
+	}
+	
+	if err != nil {
+		return fmt.Errorf("error updating password: %w", err)
+	}
+	return nil
 }
 
 type SecurityTokenRepository interface {

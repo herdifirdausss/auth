@@ -164,3 +164,19 @@ type ChallengeRequest struct {
 	MFAToken string `json:"mfa_token" validate:"required"`
 	OTPCode  string `json:"otp_code" validate:"required"`
 }
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
+type UserPasswordHistory struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	PasswordHash string    `json:"password_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+}

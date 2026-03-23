@@ -12,6 +12,7 @@ type SessionRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, session *model.Session) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error)
 	Revoke(ctx context.Context, sessionID string, reason string) error
+	RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error
 	UpdateActivity(ctx context.Context, sessionID string) error
 }
 
@@ -68,6 +69,19 @@ func (r *PostgresSessionRepository) FindByTokenHash(ctx context.Context, tokenHa
 func (r *PostgresSessionRepository) Revoke(ctx context.Context, sessionID string, reason string) error {
 	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $1 WHERE id = $2`
 	_, err := r.db.ExecContext(ctx, query, reason, sessionID)
+	return err
+}
+
+func (r *PostgresSessionRepository) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error {
+	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $2 
+	          WHERE user_id = $1 AND revoked_at IS NULL`
+	
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, userID, reason)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, userID, reason)
+	}
 	return err
 }
 

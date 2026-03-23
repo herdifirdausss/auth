@@ -13,6 +13,8 @@ func NewRouter(authHandler *handler.AuthHandler, userHandler *handler.UserHandle
 	mux.HandleFunc("/auth/verify-email", authHandler.VerifyEmail)
 	mux.HandleFunc("/auth/login", authHandler.Login)
 	mux.HandleFunc("/auth/token/refresh", authHandler.RefreshToken)
+	mux.HandleFunc("/auth/forgot-password", authHandler.ForgotPassword)
+	mux.HandleFunc("/auth/reset-password", authHandler.ResetPassword)
 	mux.HandleFunc("/auth/mfa/challenge", mfaHandler.Challenge)
 
 	// Protected Routes

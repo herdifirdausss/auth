@@ -75,3 +75,10 @@ func isValidUsername(s string) bool {
 	re := regexp.MustCompile("^[a-zA-Z0-9_]{3,50}$")
 	return re.MatchString(s)
 }
+
+func ValidatePassword(password string) error {
+	if !isValidPassword(password) {
+		return fmt.Errorf("weak password: must be at least 8 characters, include uppercase, lowercase, digit, and special character")
+	}
+	return nil
+}

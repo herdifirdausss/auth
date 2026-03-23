@@ -44,6 +44,14 @@ func (m *mockAuthService) RefreshToken(ctx context.Context, token string, ip str
 	return args.Get(0).(*model.LoginResponse), args.Error(1)
 }
 
+func (m *mockAuthService) ForgotPassword(ctx context.Context, email, ip, ua string) error {
+	return m.Called(ctx, email, ip, ua).Error(0)
+}
+
+func (m *mockAuthService) ResetPassword(ctx context.Context, token, newPassword, ip, ua string) error {
+	return m.Called(ctx, token, newPassword, ip, ua).Error(0)
+}
+
 func TestRefreshHandler_Success(t *testing.T) {
 	mockService := new(mockAuthService)
 	h := NewAuthHandler(mockService)
