@@ -9,11 +9,14 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"github.com/herdifirdausss/auth/internal/service"
+	"go.uber.org/mock/gomock"
 )
 
 func TestAuthHandler_ForgotPassword(t *testing.T) {
-	mockService := new(mockAuthService)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := service.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	t.Run("Success", func(t *testing.T) {
@@ -21,7 +24,7 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
-		mockService.On("ForgotPassword", mock.Anything, "test@example.com", mock.Anything, mock.Anything).Return(nil)
+		mockService.EXPECT().ForgotPassword(gomock.Any(), "test@example.com", gomock.Any(), gomock.Any()).Return(nil)
 
 		h.ForgotPassword(w, req)
 
@@ -33,7 +36,9 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 }
 
 func TestAuthHandler_ResetPassword(t *testing.T) {
-	mockService := new(mockAuthService)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := service.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	t.Run("Success", func(t *testing.T) {
@@ -44,7 +49,7 @@ func TestAuthHandler_ResetPassword(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
-		mockService.On("ResetPassword", mock.Anything, "valid-token", "NewSecurePassword123!", mock.Anything, mock.Anything).Return(nil)
+		mockService.EXPECT().ResetPassword(gomock.Any(), "valid-token", "NewSecurePassword123!", gomock.Any(), gomock.Any()).Return(nil)
 
 		h.ResetPassword(w, req)
 
