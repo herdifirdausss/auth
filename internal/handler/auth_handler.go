@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/service"
@@ -128,6 +129,58 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			MaxAge:   2592000, // 30 days
 		})
 		res.RefreshToken = "" // Hide from JSON
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]interface{}{
+		"status": "success",
+		"data":   res,
+	})
+}
+
+func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cookie, err := r.Cookie("refresh_token")
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "Refresh token required")
+		return
+	}
+
+	ipAddress := h.getIPAddress(r)
+	userAgent := r.UserAgent()
+
+	res, err := h.authService.RefreshToken(r.Context(), cookie.Value, ipAddress, userAgent)
+	if err != nil {
+		if strings.Contains(err.Error(), "suspicious activity") {
+			// Clear the suspicious cookie
+			http.SetCookie(w, &http.Cookie{
+				Name:     "refresh_token",
+				Value:    "",
+				Path:     "/auth",
+				HttpOnly: true,
+				Expires:  time.Unix(0, 0),
+			})
+			h.respondError(w, http.StatusUnauthorized, err.Error())
+			return
+		}
+		h.respondError(w, http.StatusUnauthorized, "Invalid or expired refresh token")
+		return
+	}
+
+	if res.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "refresh_token",
+			Value:    res.RefreshToken,
+			Path:     "/auth",
+			HttpOnly: true,
+			Secure:   true,
+			SameSite: http.SameSiteStrictMode,
+			MaxAge:   2592000,
+		})
+		res.RefreshToken = ""
 	}
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{

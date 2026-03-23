@@ -80,6 +80,9 @@ func (r *PostgresSessionRepository) UpdateActivity(ctx context.Context, sessionI
 
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, token *model.RefreshToken) error
+	FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error)
+	MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error
+	RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error
 }
 
 type PostgresRefreshTokenRepository struct {
@@ -112,4 +115,44 @@ func (r *PostgresRefreshTokenRepository) Create(ctx context.Context, tx *sql.Tx,
 		return fmt.Errorf("error creating refresh token: %w", err)
 	}
 	return nil
+}
+
+func (r *PostgresRefreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
+	query := `SELECT id, session_id, user_id, token_hash, family_id, generation, parent_token_id, 
+	          revoked_at, used_at, expires_at FROM refresh_tokens WHERE token_hash = $1`
+	
+	var t model.RefreshToken
+	err := r.db.QueryRowContext(ctx, query, tokenHash).Scan(
+		&t.ID, &t.SessionID, &t.UserID, &t.TokenHash, &t.FamilyID, &t.Generation, &t.ParentTokenID,
+		&t.RevokedAt, &t.UsedAt, &t.ExpiresAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error finding refresh token: %w", err)
+	}
+	return &t, nil
+}
+
+func (r *PostgresRefreshTokenRepository) MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error {
+	query := `UPDATE refresh_tokens SET used_at = now() WHERE id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, tokenID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, tokenID)
+	}
+	return err
+}
+
+func (r *PostgresRefreshTokenRepository) RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error {
+	query := `UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, familyID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, familyID)
+	}
+	return err
 }

@@ -12,6 +12,7 @@ func NewRouter(authHandler *handler.AuthHandler, userHandler *handler.UserHandle
 	mux.HandleFunc("/auth/register", authHandler.Register)
 	mux.HandleFunc("/auth/verify-email", authHandler.VerifyEmail)
 	mux.HandleFunc("/auth/login", authHandler.Login)
+	mux.HandleFunc("/auth/token/refresh", authHandler.RefreshToken)
 
 	// Protected Routes
 	mux.Handle("/auth/me", authMiddleware.Authenticate(http.HandlerFunc(userHandler.Me)))

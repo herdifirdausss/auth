@@ -130,3 +130,19 @@ type MFAMethod struct {
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 }
+
+type LoginRequest struct {
+	Email             string `json:"email" validate:"required,email"`
+	Password          string `json:"password" validate:"required"`
+	DeviceFingerprint string `json:"device_fingerprint"`
+	DeviceName        string `json:"device_name"`
+}
+
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	MFARequired  bool   `json:"mfa_required,omitempty"`
+	MFAToken     string `json:"mfa_token,omitempty"`
+}
