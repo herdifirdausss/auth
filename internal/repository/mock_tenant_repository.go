@@ -109,3 +109,18 @@ func (mr *MockTenantMembershipRepositoryMockRecorder) FindActiveByUserID(ctx, us
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindActiveByUserID", reflect.TypeOf((*MockTenantMembershipRepository)(nil).FindActiveByUserID), ctx, userID)
 }
+
+// GetPermissions mocks base method.
+func (m *MockTenantMembershipRepository) GetPermissions(ctx context.Context, userID, tenantID string) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPermissions", ctx, userID, tenantID)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPermissions indicates an expected call of GetPermissions.
+func (mr *MockTenantMembershipRepositoryMockRecorder) GetPermissions(ctx, userID, tenantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPermissions", reflect.TypeOf((*MockTenantMembershipRepository)(nil).GetPermissions), ctx, userID, tenantID)
+}
