@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"testing"
 	"time"
 
@@ -12,30 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
-
-// Mock repositories
-type mockRefreshTokenRepo struct{ mock.Mock }
-func (m *mockRefreshTokenRepo) Create(ctx context.Context, tx *sql.Tx, token *model.RefreshToken) error { return m.Called(ctx, tx, token).Error(0) }
-func (m *mockRefreshTokenRepo) FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) { 
-	args := m.Called(ctx, tokenHash)
-	if args.Get(0) == nil { return nil, args.Error(1) }
-	return args.Get(0).(*model.RefreshToken), args.Error(1)
-}
-func (m *mockRefreshTokenRepo) MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error { return m.Called(ctx, tx, tokenID).Error(0) }
-func (m *mockRefreshTokenRepo) RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error { return m.Called(ctx, tx, familyID).Error(0) }
-
-type mockSessionRepo struct{ mock.Mock }
-func (m *mockSessionRepo) Create(ctx context.Context, tx *sql.Tx, session *model.Session) error { return m.Called(ctx, tx, session).Error(0) }
-func (m *mockSessionRepo) FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error) { 
-	args := m.Called(ctx, tokenHash)
-	if args.Get(0) == nil { return nil, args.Error(1) }
-	return args.Get(0).(*model.Session), args.Error(1)
-}
-func (m *mockSessionRepo) Revoke(ctx context.Context, sessionID string, reason string) error { return m.Called(ctx, sessionID, reason).Error(0) }
-func (m *mockSessionRepo) UpdateActivity(ctx context.Context, sessionID string) error { return m.Called(ctx, sessionID).Error(0) }
-
-type mockSecurityEventRepo struct{ mock.Mock }
-func (m *mockSecurityEventRepo) Create(ctx context.Context, event *model.SecurityEvent) error { return m.Called(ctx, event).Error(0) }
 
 func TestRefreshToken_Success(t *testing.T) {
 	db, sqlMock, _ := sqlmock.New()

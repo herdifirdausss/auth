@@ -146,3 +146,21 @@ type LoginResponse struct {
 	MFARequired  bool   `json:"mfa_required,omitempty"`
 	MFAToken     string `json:"mfa_token,omitempty"`
 }
+
+type SetupResponse struct {
+	Secret    string `json:"secret"`
+	QRCodeURL string `json:"qr_code_url"`
+}
+
+type VerifySetupRequest struct {
+	OTPCode string `json:"otp_code" validate:"required"`
+}
+
+type VerifySetupResponse struct {
+	BackupCodes []string `json:"backup_codes"`
+}
+
+type ChallengeRequest struct {
+	MFAToken string `json:"mfa_token" validate:"required"`
+	OTPCode  string `json:"otp_code" validate:"required"`
+}

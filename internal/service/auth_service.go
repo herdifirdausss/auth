@@ -36,7 +36,7 @@ type AuthServiceImpl struct {
 	refreshTokenRepo repository.RefreshTokenRepository
 	mfaRepo         repository.MFARepository
 	hasher          security.PasswordHasher
-	rateLimiter    *redis.RateLimiter
+	rateLimiter    redis.RateLimiter
 	sessionCache   *redis.SessionCache
 	jwtConfig      security.JWTConfig
 }
@@ -53,7 +53,7 @@ func NewAuthService(
 	refreshTokenRepo repository.RefreshTokenRepository,
 	mfaRepo repository.MFARepository,
 	hasher security.PasswordHasher,
-	rateLimiter *redis.RateLimiter,
+	rateLimiter redis.RateLimiter,
 	sessionCache *redis.SessionCache,
 	jwtConfig security.JWTConfig,
 ) *AuthServiceImpl {
@@ -341,6 +341,25 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		return nil, err
 	}
 	defer tx.Rollback()
+
+	// 7. MFA Check
+	mfaMethod, err := s.mfaRepo.FindPrimaryActive(ctx, user.ID)
+	if err != nil {
+		return nil, err
+	}
+	if mfaMethod != nil {
+		mfaToken, err := security.GenerateMFAToken(s.jwtConfig, user.ID, 5*time.Minute)
+		if err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(); err != nil { // Still need to commit tx if any (though usually no tx here)
+			return nil, err
+		}
+		return &model.LoginResponse{
+			MFARequired: true,
+			MFAToken:    mfaToken,
+		}, nil
+	}
 
 	session := &model.Session{
 		UserID:            user.ID,

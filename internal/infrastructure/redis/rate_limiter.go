@@ -8,12 +8,17 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type RateLimiter struct {
+type RateLimiter interface {
+	Check(ctx context.Context, cfg RateLimitConfig) (RateLimitResult, error)
+	Reset(ctx context.Context, key string) error
+}
+
+type RedisRateLimiter struct {
 	client *redis.Client
 }
 
-func NewRateLimiter(client *redis.Client) *RateLimiter {
-	return &RateLimiter{client: client}
+func NewRateLimiter(client *redis.Client) RateLimiter {
+	return &RedisRateLimiter{client: client}
 }
 
 type RateLimitConfig struct {
@@ -28,7 +33,7 @@ type RateLimitResult struct {
 	RetryAfter time.Duration
 }
 
-func (r *RateLimiter) Check(ctx context.Context, cfg RateLimitConfig) (RateLimitResult, error) {
+func (r *RedisRateLimiter) Check(ctx context.Context, cfg RateLimitConfig) (RateLimitResult, error) {
 	pipe := r.client.Pipeline()
 	incr := pipe.Incr(ctx, cfg.Key)
 	pipe.Expire(ctx, cfg.Key, cfg.Window) // Corrected: Expire only on first hit (logic needs slight adjustment for efficiency)
@@ -64,6 +69,6 @@ func (r *RateLimiter) Check(ctx context.Context, cfg RateLimitConfig) (RateLimit
 	}, nil
 }
 
-func (r *RateLimiter) Reset(ctx context.Context, key string) error {
+func (r *RedisRateLimiter) Reset(ctx context.Context, key string) error {
 	return r.client.Del(ctx, key).Err()
 }
