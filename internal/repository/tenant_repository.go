@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 
 	"github.com/herdifirdausss/auth/internal/model"
@@ -38,7 +39,8 @@ func (r *PostgresTenantRepository) FindBySlug(ctx context.Context, slug string) 
 type TenantMembershipRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, membership *model.TenantMembership) error
 	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)
-	GetPermissions(ctx context.Context, userID, tenantID string) ([]string, error)
+	FindPermissionsByUserAndTenant(ctx context.Context, userID, tenantID string) ([]string, error)
+	FindRolesByMembership(ctx context.Context, membershipID string) ([]model.Role, error)
 }
 
 type PostgresTenantMembershipRepository struct {
@@ -80,7 +82,7 @@ func (r *PostgresTenantMembershipRepository) FindActiveByUserID(ctx context.Cont
 	return &m, nil
 }
 
-func (r *PostgresTenantMembershipRepository) GetPermissions(ctx context.Context, userID, tenantID string) ([]string, error) {
+func (r *PostgresTenantMembershipRepository) FindPermissionsByUserAndTenant(ctx context.Context, userID, tenantID string) ([]string, error) {
 	query := `
 		SELECT DISTINCT p.permission
 		FROM tenant_memberships m
@@ -104,4 +106,42 @@ func (r *PostgresTenantMembershipRepository) GetPermissions(ctx context.Context,
 		permissions = append(permissions, p)
 	}
 	return permissions, nil
+}
+
+func (r *PostgresTenantMembershipRepository) FindRolesByMembership(ctx context.Context, membershipID string) ([]model.Role, error) {
+	query := `
+		SELECT r.id, r.tenant_id, r.name, r.description, r.permissions, r.created_at, r.updated_at
+		FROM roles r
+		JOIN membership_roles mr ON r.id = mr.role_id
+		WHERE mr.membership_id = $1
+	`
+	rows, err := r.db.QueryContext(ctx, query, membershipID)
+	if err != nil {
+		return nil, fmt.Errorf("error finding roles by membership: %w", err)
+	}
+	defer rows.Close()
+
+	var roles []model.Role
+	for rows.Next() {
+		var role model.Role
+		var permsJSON []byte
+		if err := rows.Scan(
+			&role.ID, &role.TenantID, &role.Name, &role.Description,
+			&permsJSON, &role.CreatedAt, &role.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if len(permsJSON) > 0 {
+			if err := json.Unmarshal(permsJSON, &role.Permissions); err != nil {
+				return nil, fmt.Errorf("error unmarshaling permissions: %w", err)
+			}
+		} else {
+			role.Permissions = []string{}
+		}
+		roles = append(roles, role)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return roles, nil
 }

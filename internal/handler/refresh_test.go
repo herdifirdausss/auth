@@ -16,6 +16,16 @@ import (
 
 type mockAuthService struct{ mock.Mock }
 
+func (m *mockAuthService) Logout(ctx context.Context, sessionID, userID, tokenHash string) error {
+	args := m.Called(ctx, sessionID, userID, tokenHash)
+	return args.Error(0)
+}
+
+func (m *mockAuthService) LogoutAll(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
 func (m *mockAuthService) Register(ctx context.Context, req *model.RegisterRequest, ip string, ua string) (*model.RegisterResponse, error) {
 	args := m.Called(ctx, req, ip, ua)
 	if args.Get(0) == nil {

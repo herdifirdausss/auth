@@ -126,7 +126,7 @@ func (m *AuthMiddleware) HasPermission(permission string) func(http.Handler) htt
 				return
 			}
 
-			permissions, err := m.membershipRepo.GetPermissions(r.Context(), authCtx.UserID, authCtx.TenantID)
+			permissions, err := m.membershipRepo.FindPermissionsByUserAndTenant(r.Context(), authCtx.UserID, authCtx.TenantID)
 			if err != nil {
 				writeError(w, http.StatusInternalServerError, "Internal server error")
 				return

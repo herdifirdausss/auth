@@ -27,7 +27,7 @@ func TestAuthMiddleware_HasPermission(t *testing.T) {
 			TenantID: tenantID,
 		})
 
-		membershipRepo.EXPECT().GetPermissions(gomock.Any(), userID, tenantID).Return([]string{"users:read"}, nil)
+		membershipRepo.EXPECT().FindPermissionsByUserAndTenant(gomock.Any(), userID, tenantID).Return([]string{"users:read"}, nil)
 
 		req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
@@ -48,7 +48,7 @@ func TestAuthMiddleware_HasPermission(t *testing.T) {
 			TenantID: tenantID,
 		})
 
-		membershipRepo.EXPECT().GetPermissions(gomock.Any(), userID, tenantID).Return([]string{"users:*"}, nil)
+		membershipRepo.EXPECT().FindPermissionsByUserAndTenant(gomock.Any(), userID, tenantID).Return([]string{"users:*"}, nil)
 
 		req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()
@@ -69,7 +69,7 @@ func TestAuthMiddleware_HasPermission(t *testing.T) {
 			TenantID: tenantID,
 		})
 
-		membershipRepo.EXPECT().GetPermissions(gomock.Any(), userID, tenantID).Return([]string{"profile:read"}, nil)
+		membershipRepo.EXPECT().FindPermissionsByUserAndTenant(gomock.Any(), userID, tenantID).Return([]string{"profile:read"}, nil)
 
 		req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 		rr := httptest.NewRecorder()

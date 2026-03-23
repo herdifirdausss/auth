@@ -1,5 +1,6 @@
 package router
 
+import (
 	"net/http"
 	"github.com/herdifirdausss/auth/internal/handler"
 	"github.com/herdifirdausss/auth/internal/middleware"
