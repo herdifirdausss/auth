@@ -42,6 +42,21 @@ func (m *MockSessionRepository) EXPECT() *MockSessionRepositoryMockRecorder {
 	return m.recorder
 }
 
+// CleanupExpired mocks base method.
+func (m *MockSessionRepository) CleanupExpired(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CleanupExpired", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CleanupExpired indicates an expected call of CleanupExpired.
+func (mr *MockSessionRepositoryMockRecorder) CleanupExpired(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupExpired", reflect.TypeOf((*MockSessionRepository)(nil).CleanupExpired), ctx)
+}
+
 // Create mocks base method.
 func (m *MockSessionRepository) Create(ctx context.Context, tx *sql.Tx, session *model.Session) error {
 	m.ctrl.T.Helper()
@@ -150,6 +165,21 @@ func NewMockRefreshTokenRepository(ctrl *gomock.Controller) *MockRefreshTokenRep
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockRefreshTokenRepository) EXPECT() *MockRefreshTokenRepositoryMockRecorder {
 	return m.recorder
+}
+
+// CleanupExpired mocks base method.
+func (m *MockRefreshTokenRepository) CleanupExpired(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CleanupExpired", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CleanupExpired indicates an expected call of CleanupExpired.
+func (mr *MockRefreshTokenRepositoryMockRecorder) CleanupExpired(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CleanupExpired", reflect.TypeOf((*MockRefreshTokenRepository)(nil).CleanupExpired), ctx)
 }
 
 // Create mocks base method.

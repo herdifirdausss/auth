@@ -16,6 +16,7 @@ type SessionRepository interface {
 	RevokeByID(ctx context.Context, sessionID, reason, revokedBy string) error
 	RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error
 	UpdateActivity(ctx context.Context, sessionID string) error
+	CleanupExpired(ctx context.Context) (int64, error)
 }
 
 type PostgresSessionRepository struct {
@@ -91,6 +92,16 @@ func (r *PostgresSessionRepository) RevokeByID(ctx context.Context, sessionID, r
 	_, err := r.db.ExecContext(ctx, query, reason, revokedBy, sessionID)
 	return err
 }
+func (r *PostgresSessionRepository) CleanupExpired(ctx context.Context) (int64, error) {
+	query := `DELETE FROM sessions WHERE (expires_at < now() OR idle_timeout_at < now()) AND revoked_at IS NULL`
+	// Actually, should we delete revoked ones too? Yes, after some time.
+	// But the requirement says "expired".
+	res, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
 
 func (r *PostgresSessionRepository) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error {
 	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $2 
@@ -120,6 +131,7 @@ type RefreshTokenRepository interface {
 	RevokeBySessionID(ctx context.Context, tx *sql.Tx, sessionID string) error
 	RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error
 	RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID string) error
+	CleanupExpired(ctx context.Context) (int64, error)
 }
 
 type PostgresRefreshTokenRepository struct {
@@ -214,4 +226,13 @@ func (r *PostgresRefreshTokenRepository) RevokeAllByUser(ctx context.Context, tx
 		_, err = r.db.ExecContext(ctx, query, userID)
 	}
 	return err
+}
+
+func (r *PostgresRefreshTokenRepository) CleanupExpired(ctx context.Context) (int64, error) {
+	query := `DELETE FROM refresh_tokens WHERE expires_at < now() OR revoked_at < now() - interval '30 days'`
+	res, err := r.db.ExecContext(ctx, query)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
