@@ -13,6 +13,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context, email string) (*model.User, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	ExistsByUsername(ctx context.Context, username string) (bool, error)
+	SetVerified(ctx context.Context, tx *sql.Tx, userID string) error
 }
 
 type PostgresUserRepository struct {
@@ -72,4 +73,18 @@ func (r *PostgresUserRepository) ExistsByUsername(ctx context.Context, username 
 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = LOWER($1) AND deleted_at IS NULL)`
 	err := r.db.QueryRowContext(ctx, query, username).Scan(&exists)
 	return exists, err
+}
+
+func (r *PostgresUserRepository) SetVerified(ctx context.Context, tx *sql.Tx, userID string) error {
+	query := `UPDATE users SET is_verified = true, updated_at = now() WHERE id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, userID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, userID)
+	}
+	if err != nil {
+		return fmt.Errorf("error setting user as verified: %w", err)
+	}
+	return nil
 }

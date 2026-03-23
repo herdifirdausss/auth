@@ -17,6 +17,7 @@ import (
 
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
+	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error
 }
 
 type AuthServiceImpl struct {
@@ -168,4 +169,52 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 		Status:  "success",
 		Message: "Registration successful. Please check your email to verify your account.",
 	}, nil
+}
+
+func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error {
+	// 1. Hash token
+	tokenHash := security.HashToken(rawToken)
+
+	// 2. Find valid token
+	token, err := s.tokenRepo.FindValidToken(ctx, tokenHash, "email_verification")
+	if err != nil {
+		return err
+	}
+	if token == nil {
+		return fmt.Errorf("invalid or expired verification token")
+	}
+
+	// 3. Transaction
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	// 4. Mark used
+	if err := s.tokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
+		return err
+	}
+
+	// 5. Set verified
+	if err := s.userRepo.SetVerified(ctx, tx, token.UserID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
+	// 6. Security Event
+	event := &model.SecurityEvent{
+		UserID:    &token.UserID,
+		EventType: "user.email_verified",
+		Severity:  "info",
+		Details:   "Email verified successfully",
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+	}
+	s.eventRepo.Create(ctx, event)
+
+	return nil
 }

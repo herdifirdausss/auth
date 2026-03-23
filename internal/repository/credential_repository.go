@@ -41,6 +41,8 @@ func (r *PostgresCredentialRepository) Create(ctx context.Context, tx *sql.Tx, c
 
 type SecurityTokenRepository interface {
 	Create(ctx context.Context, token *model.SecurityToken) error
+	FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error)
+	MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error
 }
 
 type PostgresSecurityTokenRepository struct {
@@ -60,6 +62,39 @@ func (r *PostgresSecurityTokenRepository) Create(ctx context.Context, token *mod
 	
 	if err != nil {
 		return fmt.Errorf("error creating security token: %w", err)
+	}
+	return nil
+}
+
+func (r *PostgresSecurityTokenRepository) FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error) {
+	query := `SELECT id, user_id, token_type, token_hash, expires_at, used_at, ip_address, user_agent, created_at 
+	          FROM security_tokens 
+	          WHERE token_hash = $1 AND token_type = $2 AND used_at IS NULL AND expires_at > now()`
+	
+	var token model.SecurityToken
+	err := r.db.QueryRowContext(ctx, query, tokenHash, tokenType).Scan(
+		&token.ID, &token.UserID, &token.TokenType, &token.TokenHash, &token.ExpiresAt, &token.UsedAt, 
+		&token.IPAddress, &token.UserAgent, &token.CreatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error finding valid token: %w", err)
+	}
+	return &token, nil
+}
+
+func (r *PostgresSecurityTokenRepository) MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error {
+	query := `UPDATE security_tokens SET used_at = now() WHERE id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, tokenID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, tokenID)
+	}
+	if err != nil {
+		return fmt.Errorf("error marking token as used: %w", err)
 	}
 	return nil
 }
