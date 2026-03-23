@@ -9,16 +9,23 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type SessionCache struct {
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=redis
+type SessionCache interface {
+	Set(ctx context.Context, tokenHash string, session *CachedSession) error
+	Get(ctx context.Context, tokenHash string) (*CachedSession, error)
+	Delete(ctx context.Context, tokenHash string) error
+}
+
+type RedisSessionCache struct {
 	client *redis.Client
 	ttl    time.Duration
 }
 
-func NewSessionCache(client *redis.Client, ttl time.Duration) *SessionCache {
+func NewSessionCache(client *redis.Client, ttl time.Duration) SessionCache {
 	if ttl == 0 {
 		ttl = 5 * time.Minute
 	}
-	return &SessionCache{client: client, ttl: ttl}
+	return &RedisSessionCache{client: client, ttl: ttl}
 }
 
 type CachedSession struct {
@@ -30,7 +37,7 @@ type CachedSession struct {
 	IdleTimeoutAt time.Time `json:"idle_timeout_at"`
 }
 
-func (s *SessionCache) Set(ctx context.Context, tokenHash string, session *CachedSession) error {
+func (s *RedisSessionCache) Set(ctx context.Context, tokenHash string, session *CachedSession) error {
 	data, err := json.Marshal(session)
 	if err != nil {
 		return fmt.Errorf("error marshaling session: %w", err)
@@ -40,7 +47,7 @@ func (s *SessionCache) Set(ctx context.Context, tokenHash string, session *Cache
 	return s.client.Set(ctx, key, data, s.ttl).Err()
 }
 
-func (s *SessionCache) Get(ctx context.Context, tokenHash string) (*CachedSession, error) {
+func (s *RedisSessionCache) Get(ctx context.Context, tokenHash string) (*CachedSession, error) {
 	key := fmt.Sprintf("session:cache:%s", tokenHash)
 	data, err := s.client.Get(ctx, key).Bytes()
 	if err != nil {
@@ -55,7 +62,7 @@ func (s *SessionCache) Get(ctx context.Context, tokenHash string) (*CachedSessio
 	return &session, nil
 }
 
-func (s *SessionCache) Delete(ctx context.Context, tokenHash string) error {
+func (s *RedisSessionCache) Delete(ctx context.Context, tokenHash string) error {
 	key := fmt.Sprintf("session:cache:%s", tokenHash)
 	return s.client.Del(ctx, key).Err()
 }

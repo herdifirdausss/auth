@@ -17,6 +17,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
 	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error
@@ -24,6 +25,8 @@ type AuthService interface {
 	RefreshToken(ctx context.Context, rawRefresh string, ip string, userAgent string) (*model.LoginResponse, error)
 	ForgotPassword(ctx context.Context, email, ip, ua string) error
 	ResetPassword(ctx context.Context, token, newPassword, ip, ua string) error
+	Logout(ctx context.Context, sessionID, userID, tokenHash string) error
+	LogoutAll(ctx context.Context, userID string) error
 }
 
 type AuthServiceImpl struct {
@@ -40,7 +43,7 @@ type AuthServiceImpl struct {
 	passwordHistoryRepo repository.PasswordHistoryRepository
 	hasher          security.PasswordHasher
 	rateLimiter    redis.RateLimiter
-	sessionCache   *redis.SessionCache
+	sessionCache   redis.SessionCache
 	jwtConfig      security.JWTConfig
 }
 
@@ -58,7 +61,7 @@ func NewAuthService(
 	passwordHistoryRepo repository.PasswordHistoryRepository,
 	hasher security.PasswordHasher,
 	rateLimiter redis.RateLimiter,
-	sessionCache *redis.SessionCache,
+	sessionCache redis.SessionCache,
 	jwtConfig security.JWTConfig,
 ) *AuthServiceImpl {
 	return &AuthServiceImpl{
@@ -486,7 +489,7 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 		defer tx.Rollback()
 
 		s.refreshTokenRepo.RevokeByFamily(ctx, tx, token.FamilyID)
-		s.sessionRepo.Revoke(ctx, token.SessionID, "refresh_token_reuse")
+		s.sessionRepo.RevokeByID(ctx, token.SessionID, "refresh_token_reuse", "system")
 		
 		if err := tx.Commit(); err != nil {
 			return nil, err
@@ -538,17 +541,27 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 		return nil, err
 	}
 
-	// 7. Get user to get tenant info (optional, or just use sid/sub)
-	// For simplicity, let's just use what's in the token/session
-	// In a real app, you might want to fetch the current session to get TenantID
+	// 7. Get session to retrieve tenant ID
+	session, err := s.sessionRepo.FindByID(ctx, token.SessionID)
+	if err != nil {
+		return nil, err
+	}
+	if session == nil {
+		return nil, fmt.Errorf("session not found for refresh token")
+	}
+	if session.RevokedAt != nil {
+		return nil, fmt.Errorf("session revoked")
+	}
 
 	// 8. Generate new JWT
 	claims := security.JWTClaims{
 		Sub: token.UserID,
 		Sid: token.SessionID,
 	}
-	// Note: We might miss Tid here if not fetched from session.
-	// But let's assume session still valid.
+	if session.TenantID != nil {
+		claims.Tid = *session.TenantID
+	}
+	// Add roles if needed...
 	
 	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
 	if err != nil {
@@ -708,6 +721,58 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 		Details:   "Password reset successfully",
 		IPAddress: ip,
 		UserAgent: ua,
+	})
+
+	return nil
+}
+
+func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHash string) error {
+	// 1. Revoke Session
+	if err := s.sessionRepo.RevokeByID(ctx, sessionID, "user_logout", userID); err != nil {
+		return err
+	}
+
+	// 2. Revoke Refresh Tokens for this session
+	if err := s.refreshTokenRepo.RevokeBySessionID(ctx, nil, sessionID); err != nil {
+		return err
+	}
+
+	// 3. Clear Redis Cache
+	if s.sessionCache != nil {
+		if err := s.sessionCache.Delete(ctx, tokenHash); err != nil {
+			// Log error but don't fail logout
+			fmt.Printf("Error deleting session cache: %v\n", err)
+		}
+	}
+
+	// 4. Log Security Event
+	s.eventRepo.Create(ctx, &model.SecurityEvent{
+		UserID:    &userID,
+		EventType: "auth.logout",
+		Severity:  "info",
+		Details:   "User logged out successfully",
+	})
+
+	return nil
+}
+
+func (s *AuthServiceImpl) LogoutAll(ctx context.Context, userID string) error {
+	// 1. Revoke All Sessions
+	if err := s.sessionRepo.RevokeAllByUser(ctx, nil, userID, "logout_all"); err != nil {
+		return err
+	}
+
+	// 2. Revoke All Refresh Tokens
+	if err := s.refreshTokenRepo.RevokeAllByUser(ctx, nil, userID); err != nil {
+		return err
+	}
+
+	// 3. Log Security Event
+	s.eventRepo.Create(ctx, &model.SecurityEvent{
+		UserID:    &userID,
+		EventType: "auth.logout_all",
+		Severity:  "info",
+		Details:   "User logged out from all devices",
 	})
 
 	return nil

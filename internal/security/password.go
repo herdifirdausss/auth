@@ -8,6 +8,7 @@ import (
 	"golang.org/x/crypto/argon2"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=security
 type PasswordHasher interface {
 	Hash(password string) (hash string, salt string, err error)
 	Verify(password string, hash string, salt string) (bool, error)

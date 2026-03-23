@@ -8,6 +8,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/model"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type CredentialRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, cred *model.UserCredential) error
 	FindByUserID(ctx context.Context, userID string) (*model.UserCredential, error)
@@ -77,6 +78,7 @@ func (r *PostgresCredentialRepository) UpdatePassword(ctx context.Context, tx *s
 	return nil
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type SecurityTokenRepository interface {
 	Create(ctx context.Context, token *model.SecurityToken) error
 	FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error)
@@ -137,6 +139,7 @@ func (r *PostgresSecurityTokenRepository) MarkUsed(ctx context.Context, tx *sql.
 	return nil
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type SecurityEventRepository interface {
 	Create(ctx context.Context, event *model.SecurityEvent) error
 }

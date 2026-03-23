@@ -6,6 +6,7 @@ import (
 	"fmt"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type PasswordHistoryRepository interface {
 	GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error)
 	Create(ctx context.Context, tx *sql.Tx, userID, passwordHash string) error

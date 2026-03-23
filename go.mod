@@ -12,6 +12,7 @@ require (
 	github.com/redis/go-redis/v9 v9.18.0
 	github.com/stretchr/testify v1.11.1
 	github.com/xlzd/gotp v0.1.0
+	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.49.0
 )
 

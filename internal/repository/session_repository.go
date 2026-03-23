@@ -8,10 +8,12 @@ import (
 	"github.com/herdifirdausss/auth/internal/model"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type SessionRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, session *model.Session) error
+	FindByID(ctx context.Context, id string) (*model.Session, error)
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error)
-	Revoke(ctx context.Context, sessionID string, reason string) error
+	RevokeByID(ctx context.Context, sessionID, reason, revokedBy string) error
 	RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error
 	UpdateActivity(ctx context.Context, sessionID string) error
 }
@@ -48,6 +50,24 @@ func (r *PostgresSessionRepository) Create(ctx context.Context, tx *sql.Tx, sess
 	return nil
 }
 
+func (r *PostgresSessionRepository) FindByID(ctx context.Context, id string) (*model.Session, error) {
+	query := `SELECT id, user_id, tenant_id, token_hash, mfa_verified, expires_at, idle_timeout_at, revoked_at 
+	          FROM sessions WHERE id = $1`
+	
+	var sess model.Session
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
+		&sess.ID, &sess.UserID, &sess.TenantID, &sess.TokenHash, 
+		&sess.MFAVerified, &sess.ExpiresAt, &sess.IdleTimeoutAt, &sess.RevokedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("error finding session by id: %w", err)
+	}
+	return &sess, nil
+}
+
 func (r *PostgresSessionRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error) {
 	query := `SELECT id, user_id, tenant_id, membership_id, token_hash, mfa_verified, expires_at, idle_timeout_at 
 	          FROM sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`
@@ -66,9 +86,9 @@ func (r *PostgresSessionRepository) FindByTokenHash(ctx context.Context, tokenHa
 	return &sess, nil
 }
 
-func (r *PostgresSessionRepository) Revoke(ctx context.Context, sessionID string, reason string) error {
-	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $1 WHERE id = $2`
-	_, err := r.db.ExecContext(ctx, query, reason, sessionID)
+func (r *PostgresSessionRepository) RevokeByID(ctx context.Context, sessionID, reason, revokedBy string) error {
+	query := `UPDATE sessions SET revoked_at = now(), revoked_reason = $1, revoked_by = $2 WHERE id = $3`
+	_, err := r.db.ExecContext(ctx, query, reason, revokedBy, sessionID)
 	return err
 }
 
@@ -92,11 +112,14 @@ func (r *PostgresSessionRepository) UpdateActivity(ctx context.Context, sessionI
 	return err
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, token *model.RefreshToken) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error)
 	MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error
+	RevokeBySessionID(ctx context.Context, tx *sql.Tx, sessionID string) error
 	RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error
+	RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID string) error
 }
 
 type PostgresRefreshTokenRepository struct {
@@ -160,6 +183,17 @@ func (r *PostgresRefreshTokenRepository) MarkUsed(ctx context.Context, tx *sql.T
 	return err
 }
 
+func (r *PostgresRefreshTokenRepository) RevokeBySessionID(ctx context.Context, tx *sql.Tx, sessionID string) error {
+	query := `UPDATE refresh_tokens SET revoked_at = now() WHERE session_id = $1 AND revoked_at IS NULL`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, sessionID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, sessionID)
+	}
+	return err
+}
+
 func (r *PostgresRefreshTokenRepository) RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error {
 	query := `UPDATE refresh_tokens SET revoked_at = now() WHERE family_id = $1 AND revoked_at IS NULL`
 	var err error
@@ -167,6 +201,17 @@ func (r *PostgresRefreshTokenRepository) RevokeByFamily(ctx context.Context, tx 
 		_, err = tx.ExecContext(ctx, query, familyID)
 	} else {
 		_, err = r.db.ExecContext(ctx, query, familyID)
+	}
+	return err
+}
+
+func (r *PostgresRefreshTokenRepository) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID string) error {
+	query := `UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL`
+	var err error
+	if tx != nil {
+		_, err = tx.ExecContext(ctx, query, userID)
+	} else {
+		_, err = r.db.ExecContext(ctx, query, userID)
 	}
 	return err
 }

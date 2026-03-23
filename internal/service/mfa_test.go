@@ -9,9 +9,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/model"
+	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 	"github.com/xlzd/gotp"
 )
 
@@ -19,8 +20,11 @@ func TestMFAService_SetupTOTP(t *testing.T) {
 	os.Setenv("MFA_ENCRYPTION_KEY", "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=")
 	defer os.Unsetenv("MFA_ENCRYPTION_KEY")
 
-	mfaRepo := new(mockMFARepo)
-	rateLimiter := new(mockRateLimiter)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mfaRepo := repository.NewMockMFARepository(ctrl)
+	rateLimiter := redis.NewMockRateLimiter(ctrl)
 	
 	jwtConfig := security.JWTConfig{
 		SecretKey: []byte("test-secret"),
@@ -29,21 +33,23 @@ func TestMFAService_SetupTOTP(t *testing.T) {
 	
 	svc := NewMFAService(nil, mfaRepo, nil, nil, nil, jwtConfig, rateLimiter)
 	
-	mfaRepo.On("Create", mock.Anything, mock.Anything).Return(nil)
+	mfaRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 	
 	res, err := svc.SetupTOTP(context.Background(), "user-1", "user@example.com")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res.Secret)
 	assert.NotEmpty(t, res.QRCodeURL)
-	mfaRepo.AssertExpectations(t)
 }
 
 func TestMFAService_VerifySetup(t *testing.T) {
 	os.Setenv("MFA_ENCRYPTION_KEY", "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI=")
 	defer os.Unsetenv("MFA_ENCRYPTION_KEY")
 
-	mfaRepo := new(mockMFARepo)
-	rateLimiter := new(mockRateLimiter)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mfaRepo := repository.NewMockMFARepository(ctrl)
+	rateLimiter := redis.NewMockRateLimiter(ctrl)
 	
 	jwtConfig := security.JWTConfig{
 		SecretKey: []byte("test-secret"),
@@ -65,24 +71,29 @@ func TestMFAService_VerifySetup(t *testing.T) {
 	totp := gotp.NewDefaultTOTP(secret)
 	otpCode := totp.Now()
 	
-	rateLimiter.On("Check", mock.Anything, mock.MatchedBy(func(cfg redis.RateLimitConfig) bool {
-		return cfg.Key == "mfa_setup:user-1"
-	})).Return(redis.RateLimitResult{Allowed: true}, nil)
-	mfaRepo.On("FindInactiveByUser", mock.Anything, "user-1", "totp").Return(method, nil)
-	mfaRepo.On("Activate", mock.Anything, "mfa-1").Return(nil)
-	mfaRepo.On("SetBackupCodes", mock.Anything, "mfa-1", mock.Anything).Return(nil)
+	rateLimiter.EXPECT().Check(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, cfg redis.RateLimitConfig) (redis.RateLimitResult, error) {
+		if cfg.Key != "mfa_setup:user-1" {
+			return redis.RateLimitResult{Allowed: false}, nil
+		}
+		return redis.RateLimitResult{Allowed: true}, nil
+	})
+	mfaRepo.EXPECT().FindInactiveByUser(gomock.Any(), "user-1", "totp").Return(method, nil)
+	mfaRepo.EXPECT().Activate(gomock.Any(), "mfa-1").Return(nil)
+	mfaRepo.EXPECT().SetBackupCodes(gomock.Any(), "mfa-1", gomock.Any()).Return(nil)
 	
 	res, err := svc.VerifySetup(context.Background(), "user-1", otpCode)
 	assert.NoError(t, err)
 	assert.Len(t, res.BackupCodes, 10)
-	mfaRepo.AssertExpectations(t)
 }
 
 func TestMFAService_Challenge(t *testing.T) {
-	mfaRepo := new(mockMFARepo)
-	sessRepo := new(mockSessionRepo)
-	rfRepo := new(mockRefreshTokenRepo)
-	rateLimiter := new(mockRateLimiter)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mfaRepo := repository.NewMockMFARepository(ctrl)
+	sessRepo := repository.NewMockSessionRepository(ctrl)
+	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
+	rateLimiter := redis.NewMockRateLimiter(ctrl)
 	
 	db, mockDB, _ := sqlmock.New()
 	defer db.Close()
@@ -111,20 +122,22 @@ func TestMFAService_Challenge(t *testing.T) {
 	totp := gotp.NewDefaultTOTP(secret)
 	otpCode := totp.Now()
 	
-	rateLimiter.On("Check", mock.Anything, mock.MatchedBy(func(cfg redis.RateLimitConfig) bool {
-		return cfg.Key == "mfa_challenge:"+userID
-	})).Return(redis.RateLimitResult{Allowed: true}, nil)
-	mfaRepo.On("FindPrimaryActive", mock.Anything, userID).Return(method, nil)
+	rateLimiter.EXPECT().Check(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, cfg redis.RateLimitConfig) (redis.RateLimitResult, error) {
+		if cfg.Key != "mfa_challenge:"+userID {
+			return redis.RateLimitResult{Allowed: false}, nil
+		}
+		return redis.RateLimitResult{Allowed: true}, nil
+	})
+	mfaRepo.EXPECT().FindPrimaryActive(gomock.Any(), userID).Return(method, nil)
 	
 	mockDB.ExpectBegin()
-	sessRepo.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(nil)
-	rfRepo.On("Create", mock.Anything, mock.Anything, mock.Anything).Return(nil)
+	sessRepo.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	rfRepo.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	mockDB.ExpectCommit()
 	
 	res, err := svc.Challenge(context.Background(), mfaToken, otpCode, "127.0.0.1", "ua", "")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res.AccessToken)
 	assert.NotEmpty(t, res.RefreshToken)
-	mfaRepo.AssertExpectations(t)
 	assert.NoError(t, mockDB.ExpectationsWereMet())
 }

@@ -12,10 +12,10 @@ import (
 type AuthMiddleware struct {
 	jwtConfig    security.JWTConfig
 	sessionRepo  repository.SessionRepository
-	sessionCache *redis.SessionCache
+	sessionCache redis.SessionCache
 }
 
-func NewAuthMiddleware(cfg security.JWTConfig, repo repository.SessionRepository, cache *redis.SessionCache) *AuthMiddleware {
+func NewAuthMiddleware(cfg security.JWTConfig, repo repository.SessionRepository, cache redis.SessionCache) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtConfig:    cfg,
 		sessionRepo:  repo,
@@ -79,7 +79,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 
 		// 7. Validate Idle Timeout
 		if session.IdleTimeoutAt.Before(time.Now()) {
-			m.sessionRepo.Revoke(r.Context(), session.SessionID, "idle_timeout")
+			m.sessionRepo.RevokeByID(r.Context(), session.SessionID, "idle_timeout", "system")
 			m.sessionCache.Delete(r.Context(), tokenHash)
 			writeUnauthorized(w, "Session timed out due to inactivity")
 			return

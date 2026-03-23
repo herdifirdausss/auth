@@ -8,6 +8,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/model"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type TenantRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*model.Tenant, error)
 }
@@ -33,6 +34,7 @@ func (r *PostgresTenantRepository) FindBySlug(ctx context.Context, slug string) 
 	return &tenant, nil
 }
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type TenantMembershipRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, membership *model.TenantMembership) error
 	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)

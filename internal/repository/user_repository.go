@@ -8,6 +8,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/model"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type UserRepository interface {
 	Create(ctx context.Context, tx *sql.Tx, user *model.User) error
 	FindByEmail(ctx context.Context, email string) (*model.User, error)

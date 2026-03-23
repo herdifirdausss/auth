@@ -13,6 +13,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/security"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
 type MFAService interface {
 	SetupTOTP(ctx context.Context, userID, email string) (*model.SetupResponse, error)
 	VerifySetup(ctx context.Context, userID, otpCode string) (*model.VerifySetupResponse, error)

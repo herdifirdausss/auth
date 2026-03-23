@@ -8,6 +8,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/model"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type MFARepository interface {
 	FindPrimaryActive(ctx context.Context, userID string) (*model.MFAMethod, error)
 	Create(ctx context.Context, method *model.MFAMethod) error

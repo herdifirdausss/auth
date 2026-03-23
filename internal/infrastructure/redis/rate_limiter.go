@@ -8,6 +8,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=redis
 type RateLimiter interface {
 	Check(ctx context.Context, cfg RateLimitConfig) (RateLimitResult, error)
 	Reset(ctx context.Context, key string) error

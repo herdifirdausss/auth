@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/herdifirdausss/auth/internal/middleware"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/service"
 )
@@ -243,6 +244,72 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, map[string]string{
 		"status":  "success",
 		"message": "Password has been reset successfully",
+	})
+}
+
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	authCtx, err := middleware.GetAuthContext(r.Context())
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	err = h.authService.Logout(r.Context(), authCtx.SessionID, authCtx.UserID, authCtx.TokenHash)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "Logout failed")
+		return
+	}
+
+	// Clear refresh token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/auth",
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+	})
+
+	h.respondJSON(w, http.StatusOK, map[string]string{
+		"status":  "success",
+		"message": "Logged out successfully",
+	})
+}
+
+func (h *AuthHandler) LogoutAll(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	authCtx, err := middleware.GetAuthContext(r.Context())
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	err = h.authService.LogoutAll(r.Context(), authCtx.UserID)
+	if err != nil {
+		h.respondError(w, http.StatusInternalServerError, "Logout all failed")
+		return
+	}
+
+	// Clear refresh token cookie
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/auth",
+		HttpOnly: true,
+		Expires:  time.Unix(0, 0),
+	})
+
+	h.respondJSON(w, http.StatusOK, map[string]string{
+		"status":  "success",
+		"message": "Logged out from all devices",
 	})
 }
 
