@@ -34,7 +34,7 @@ func TestAuthService_Logout(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		sessRepo.EXPECT().RevokeByID(gomock.Any(), sessID, "user_logout", userID).Return(nil)
 		rfRepo.EXPECT().RevokeBySessionID(gomock.Any(), nil, sessID).Return(nil)
-		sessionCache.EXPECT().Delete(gomock.Any(), tokenHash).Return(nil)
+		sessionCache.EXPECT().Delete(gomock.Any(), userID, sessID).Return(nil)
 		eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 
 		err := s.Logout(context.Background(), sessID, userID, tokenHash)
@@ -49,11 +49,13 @@ func TestAuthService_LogoutAll(t *testing.T) {
 	sessRepo := mocks.NewMockSessionRepository(ctrl)
 	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
 	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+	sessionCache := mocks.NewMockSessionCache(ctrl)
 
 	s := &AuthServiceImpl{
 		sessionRepo:      sessRepo,
 		refreshTokenRepo: rfRepo,
 		eventRepo:        eventRepo,
+		sessionCache:     sessionCache,
 		logger:           slog.Default(),
 	}
 
@@ -62,6 +64,7 @@ func TestAuthService_LogoutAll(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		sessRepo.EXPECT().RevokeAllByUser(gomock.Any(), nil, userID, "logout_all").Return(nil)
 		rfRepo.EXPECT().RevokeAllByUser(gomock.Any(), nil, userID).Return(nil)
+		sessionCache.EXPECT().DeleteByUserID(gomock.Any(), userID).Return(nil)
 		eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 
 		err := s.LogoutAll(context.Background(), userID)

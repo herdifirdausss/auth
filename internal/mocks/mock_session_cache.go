@@ -42,17 +42,31 @@ func (m *MockSessionCache) EXPECT() *MockSessionCacheMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockSessionCache) Delete(ctx context.Context, tokenHash string) error {
+func (m *MockSessionCache) Delete(ctx context.Context, userID, tokenHash string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", ctx, tokenHash)
+	ret := m.ctrl.Call(m, "Delete", ctx, userID, tokenHash)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockSessionCacheMockRecorder) Delete(ctx, tokenHash any) *gomock.Call {
+func (mr *MockSessionCacheMockRecorder) Delete(ctx, userID, tokenHash any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockSessionCache)(nil).Delete), ctx, tokenHash)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockSessionCache)(nil).Delete), ctx, userID, tokenHash)
+}
+
+// DeleteByUserID mocks base method.
+func (m *MockSessionCache) DeleteByUserID(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteByUserID", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteByUserID indicates an expected call of DeleteByUserID.
+func (mr *MockSessionCacheMockRecorder) DeleteByUserID(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteByUserID", reflect.TypeOf((*MockSessionCache)(nil).DeleteByUserID), ctx, userID)
 }
 
 // Get mocks base method.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,7 @@ func TestLoginHandler_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	reqBody := model.LoginRequest{
 		Email:    "test@example.com",
@@ -66,7 +67,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	reqBody := model.LoginRequest{
 		Email:    "wrong@example.com",
@@ -94,7 +95,7 @@ func TestLoginHandler_TooManyAttempts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	reqBody := model.LoginRequest{
 		Email:    "attacker@example.com",

@@ -113,13 +113,13 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		}
 
 		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(token, nil)
-		historyRepo.EXPECT().GetRecentPasswords(gomock.Any(), "user-1", 5).Return([]string{"old-hash-1"}, nil)
-		hasher.EXPECT().Verify(newPassword, "old-hash-1", "").Return(false, nil)
+		historyRepo.EXPECT().GetRecentPasswords(gomock.Any(), "user-1", 5).Return([]*model.UserPasswordHistory{{PasswordHash: "old-hash-1", PasswordSalt: "old-salt-1"}}, nil)
+		hasher.EXPECT().Verify(newPassword, "old-hash-1", "old-salt-1").Return(false, nil)
 		hasher.EXPECT().Hash(newPassword).Return("new-hash", "new-salt", nil)
 
 		mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
 		credRepo.EXPECT().UpdatePassword(gomock.Any(), mockTx, "user-1", "new-hash", "new-salt").Return(nil)
-		historyRepo.EXPECT().Create(gomock.Any(), mockTx, "user-1", "new-hash").Return(nil)
+		historyRepo.EXPECT().Create(gomock.Any(), mockTx, "user-1", "new-hash", "new-salt").Return(nil)
 		historyRepo.EXPECT().Cleanup(gomock.Any(), "user-1", 5).Return(nil)
 		tokenRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "token-1").Return(nil)
 		sessionRepo.EXPECT().RevokeAllByUser(gomock.Any(), mockTx, "user-1", "password_reset").Return(nil)
@@ -177,8 +177,8 @@ func TestAuthService_ResetPassword(t *testing.T) {
 
 		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
 		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(token, nil)
-		historyRepo.EXPECT().GetRecentPasswords(gomock.Any(), "user-1", 5).Return([]string{"old-hash"}, nil)
-		hasher.EXPECT().Verify(newPassword, "old-hash", "").Return(true, nil)
+		historyRepo.EXPECT().GetRecentPasswords(gomock.Any(), "user-1", 5).Return([]*model.UserPasswordHistory{{PasswordHash: "old-hash", PasswordSalt: "old-salt"}}, nil)
+		hasher.EXPECT().Verify(newPassword, "old-hash", "old-salt").Return(true, nil)
 
 		err := s.ResetPassword(context.Background(), rawToken, newPassword, "127.0.0.1", "ua")
 		assert.Error(t, err)

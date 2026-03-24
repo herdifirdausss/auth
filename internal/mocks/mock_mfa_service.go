@@ -42,18 +42,32 @@ func (m *MockMFAService) EXPECT() *MockMFAServiceMockRecorder {
 }
 
 // Challenge mocks base method.
-func (m *MockMFAService) Challenge(ctx context.Context, mfaToken, otpCode, ip, ua, fingerprint string) (*model.LoginResponse, error) {
+func (m *MockMFAService) Challenge(ctx context.Context, req model.ChallengeRequest, ip, ua, fingerprint string) (*model.LoginResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Challenge", ctx, mfaToken, otpCode, ip, ua, fingerprint)
+	ret := m.ctrl.Call(m, "Challenge", ctx, req, ip, ua, fingerprint)
 	ret0, _ := ret[0].(*model.LoginResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Challenge indicates an expected call of Challenge.
-func (mr *MockMFAServiceMockRecorder) Challenge(ctx, mfaToken, otpCode, ip, ua, fingerprint any) *gomock.Call {
+func (mr *MockMFAServiceMockRecorder) Challenge(ctx, req, ip, ua, fingerprint any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Challenge", reflect.TypeOf((*MockMFAService)(nil).Challenge), ctx, mfaToken, otpCode, ip, ua, fingerprint)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Challenge", reflect.TypeOf((*MockMFAService)(nil).Challenge), ctx, req, ip, ua, fingerprint)
+}
+
+// DisableMFA mocks base method.
+func (m *MockMFAService) DisableMFA(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableMFA", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DisableMFA indicates an expected call of DisableMFA.
+func (mr *MockMFAServiceMockRecorder) DisableMFA(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableMFA", reflect.TypeOf((*MockMFAService)(nil).DisableMFA), ctx, userID)
 }
 
 // SetupTOTP mocks base method.

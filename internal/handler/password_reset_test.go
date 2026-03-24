@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,7 +20,7 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	t.Run("Success", func(t *testing.T) {
 		reqBody, _ := json.Marshal(model.ForgotPasswordRequest{Email: "test@example.com"})
@@ -54,7 +55,7 @@ func TestAuthHandler_ResetPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	t.Run("Success", func(t *testing.T) {
 		reqBody, _ := json.Marshal(model.ResetPasswordRequest{

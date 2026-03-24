@@ -63,7 +63,7 @@ func TestLogin_Success(t *testing.T) {
 	ip := "1.1.1.1"
 	ua := "ua"
 
-	user := &model.User{ID: "user-1", Email: req.Email, IsActive: true}
+	user := &model.User{ID: "user-1", Email: req.Email, IsActive: true, IsVerified: true}
 	cred := &model.UserCredential{UserID: user.ID, PasswordHash: "hash", PasswordSalt: "salt"}
 
 	rateLimiter.EXPECT().Check(ctx, gomock.Any()).Return(redis.RateLimitResult{Allowed: true}, nil).Times(2)
@@ -75,10 +75,7 @@ func TestLogin_Success(t *testing.T) {
 	// Mock MembershipRepo (added to setupLoginTest helper properly if needed, but here I'll just use it)
 	membershipRepo := s.membershipRepo.(*mocks.MockTenantMembershipRepository)
 	membershipRepo.EXPECT().FindActiveByUserID(ctx, user.ID).Return(nil, nil)
-	
-	mfaRepo.EXPECT().FindPrimaryActive(ctx, user.ID).Return(nil, nil).Times(2) // Redundant in code
-	
-	// Transaction for session/rf
+	mfaRepo.EXPECT().FindPrimaryActive(ctx, user.ID).Return(nil, nil)
 	mockTx := mocks.NewMockTx(ctrl)
 	db.EXPECT().Begin(ctx).Return(mockTx, nil)
 	sessRepo.EXPECT().Create(ctx, mockTx, gomock.Any()).Return(nil)
@@ -119,7 +116,7 @@ func TestLogin_WrongPassword_Suspension(t *testing.T) {
 
 	ctx := context.Background()
 	req := &model.LoginRequest{Email: "test@example.com", Password: "wrong"}
-	user := &model.User{ID: "user-1", Email: "test@example.com"}
+	user := &model.User{ID: "user-1", Email: "test@example.com", IsVerified: true}
 	cred := &model.UserCredential{UserID: "user-1", PasswordHash: "h", PasswordSalt: "s"}
 
 	rateLimiter.EXPECT().Check(ctx, gomock.Any()).Return(redis.RateLimitResult{Allowed: true}, nil).Times(2)

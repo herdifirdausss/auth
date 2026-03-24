@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
@@ -20,6 +21,7 @@ func TestRegister_UnicodeNormalization(t *testing.T) {
 	userRepo := mocks.NewMockUserRepository(ctrl)
 	s := &AuthServiceImpl{
 		userRepo: userRepo,
+		logger:   slog.Default(),
 	}
 
 	// Case 1: user@exämple.com (NFC)
@@ -33,7 +35,8 @@ func TestRegister_UnicodeNormalization(t *testing.T) {
 	req := &model.RegisterRequest{
 		Email:    emailNFD,
 		Username: "testuser",
-		Password: "Password123!",
+		Password:   "Password123!",
+		TenantSlug: "test-tenant",
 	}
 
 	// Expect ExistsByEmail to be called with normalized NFC email
@@ -58,6 +61,7 @@ func TestLogin_TimingAttackDummyHash(t *testing.T) {
 		userRepo:    userRepo,
 		hasher:      hasher,
 		rateLimiter: rateLimiter,
+		logger:      slog.Default(),
 	}
 
 	ctx := context.Background()
@@ -93,6 +97,7 @@ func TestRegister_NullByteInjection(t *testing.T) {
 	s := &AuthServiceImpl{
 		userRepo: userRepo,
 		hasher:   hasher,
+		logger:   slog.Default(),
 	}
 
 	ctx := context.Background()
@@ -100,7 +105,8 @@ func TestRegister_NullByteInjection(t *testing.T) {
 	req := &model.RegisterRequest{
 		Email:    "test@example.com",
 		Username: "testuser",
-		Password: passwordWithNull,
+		Password:   passwordWithNull,
+		TenantSlug: "test-tenant",
 	}
 
 	// Expect hasher.Hash to be called with the full password (including null byte)

@@ -52,9 +52,11 @@ func ValidateAccessToken(cfg JWTConfig, tokenString string) (*JWTClaims, error) 
 }
 
 func GenerateMFAToken(cfg JWTConfig, userID string, expiry time.Duration) (string, error) {
+	id, _ := GenerateSecureToken(16)
 	claims := JWTClaims{
 		Sub: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        id,
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(expiry)),
 			Issuer:    cfg.Issuer,
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

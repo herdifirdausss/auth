@@ -27,6 +27,7 @@ func NewRouter(authHandler *handler.AuthHandler, userHandler *handler.UserHandle
 	mux.Handle("/auth/me", authMiddleware.Authenticate(http.HandlerFunc(userHandler.Me)))
 	mux.Handle("/auth/mfa/setup", authMiddleware.Authenticate(http.HandlerFunc(mfaHandler.Setup)))
 	mux.Handle("/auth/mfa/verify-setup", authMiddleware.Authenticate(http.HandlerFunc(mfaHandler.VerifySetup)))
+	mux.Handle("/auth/mfa/disable", authMiddleware.Authenticate(http.HandlerFunc(mfaHandler.Disable)))
 	mux.Handle("/auth/logout", authMiddleware.Authenticate(http.HandlerFunc(authHandler.Logout)))
 	mux.Handle("/auth/logout-all", authMiddleware.Authenticate(http.HandlerFunc(authHandler.LogoutAll)))
 

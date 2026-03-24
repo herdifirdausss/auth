@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,7 +20,7 @@ func TestAuthHandler_Register_UnicodeNormalization(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	// Register with NFD email
 	emailNFD := "user@ex\u0061\u0308mple.com" // a + diaeresis
@@ -54,7 +55,7 @@ func TestAuthHandler_Login_ConstantTime(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	reqBody := model.LoginRequest{
 		Email:    "test@example.com",
