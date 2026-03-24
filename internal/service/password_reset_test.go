@@ -65,7 +65,15 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 		userRepo.EXPECT().FindByEmail(gomock.Any(), email).Return(nil, nil)
 
 		err := s.ForgotPassword(context.Background(), email, ip, ua)
-		assert.NoError(t, err) // Should still be no error for anti-enumeration
+		assert.NoError(t, err) // Always no error for anti-enumeration
+	})
+
+	t.Run("DatabaseError_UserLookup", func(t *testing.T) {
+		rateLimiter.EXPECT().Check(gomock.Any(), gomock.Any()).Return(redis.RateLimitResult{Allowed: true}, nil)
+		userRepo.EXPECT().FindByEmail(gomock.Any(), email).Return(nil, assert.AnError)
+
+		err := s.ForgotPassword(context.Background(), email, ip, ua)
+		assert.Error(t, err) // DB errors should be returned
 	})
 }
 
@@ -121,6 +129,35 @@ func TestAuthService_ResetPassword(t *testing.T) {
 
 		err := s.ResetPassword(context.Background(), rawToken, newPassword, "127.0.0.1", "ua")
 		assert.NoError(t, err)
+	})
+
+	t.Run("InvalidToken", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		s := &AuthServiceImpl{tokenRepo: tokenRepo, logger: slog.Default()}
+
+		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(nil, nil)
+
+		err := s.ResetPassword(context.Background(), rawToken, newPassword, "127.0.0.1", "ua")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid or expired")
+	})
+
+	t.Run("WeakPassword", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		s := &AuthServiceImpl{tokenRepo: tokenRepo, logger: slog.Default()}
+
+		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
+		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(token, nil)
+
+		err := s.ResetPassword(context.Background(), rawToken, "weak", "127.0.0.1", "ua")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "weak password")
 	})
 
 	t.Run("RecentlyUsedPassword", func(t *testing.T) {

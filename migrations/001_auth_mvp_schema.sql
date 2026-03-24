@@ -240,7 +240,8 @@ CREATE TABLE sessions (
   revoked_reason     text,
   revoked_by         uuid        REFERENCES users(id),
 
-  created_at         timestamptz NOT NULL DEFAULT now()
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
 );
 
 -- Token validation (most critical index in the whole schema)

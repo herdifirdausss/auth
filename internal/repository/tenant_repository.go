@@ -8,7 +8,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -17,10 +16,10 @@ type TenantRepository interface {
 }
 
 type PostgresTenantRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresTenantRepository(db *pgxpool.Pool) *PostgresTenantRepository {
+func NewPostgresTenantRepository(db Pool) *PostgresTenantRepository {
 	return &PostgresTenantRepository{db: db}
 }
 
@@ -43,13 +42,14 @@ type TenantMembershipRepository interface {
 	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)
 	FindPermissionsByUserAndTenant(ctx context.Context, userID, tenantID string) ([]string, error)
 	FindRolesByMembership(ctx context.Context, membershipID string) ([]model.Role, error)
+	ActivateByUserID(ctx context.Context, tx pgx.Tx, userID string) error
 }
 
 type PostgresTenantMembershipRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresTenantMembershipRepository(db *pgxpool.Pool) *PostgresTenantMembershipRepository {
+func NewPostgresTenantMembershipRepository(db Pool) *PostgresTenantMembershipRepository {
 	return &PostgresTenantMembershipRepository{db: db}
 }
 
@@ -147,4 +147,16 @@ func (r *PostgresTenantMembershipRepository) FindRolesByMembership(ctx context.C
 	}
 	return roles, nil
 }
-
+func (r *PostgresTenantMembershipRepository) ActivateByUserID(ctx context.Context, tx pgx.Tx, userID string) error {
+	query := `UPDATE tenant_memberships SET status = 'active', updated_at = now() WHERE user_id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.Exec(ctx, query, userID)
+	} else {
+		_, err = r.db.Exec(ctx, query, userID)
+	}
+	if err != nil {
+		return fmt.Errorf("error activating membership: %w", err)
+	}
+	return nil
+}

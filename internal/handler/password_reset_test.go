@@ -3,8 +3,10 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/herdifirdausss/auth/internal/mocks"
@@ -33,6 +35,19 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 		json.NewDecoder(w.Body).Decode(&resp)
 		assert.Equal(t, "success", resp["status"])
 	})
+	t.Run("InvalidJSON", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", strings.NewReader("invalid-json"))
+		w := httptest.NewRecorder()
+		h.ForgotPassword(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("MethodNotAllowed", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/auth/forgot-password", nil)
+		w := httptest.NewRecorder()
+		h.ForgotPassword(w, req)
+		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
+	})
 }
 
 func TestAuthHandler_ResetPassword(t *testing.T) {
@@ -57,5 +72,19 @@ func TestAuthHandler_ResetPassword(t *testing.T) {
 		var resp map[string]string
 		json.NewDecoder(w.Body).Decode(&resp)
 		assert.Equal(t, "success", resp["status"])
+	})
+	t.Run("WeakPassword", func(t *testing.T) {
+		reqBody, _ := json.Marshal(model.ResetPasswordRequest{
+			Token:       "valid-token",
+			NewPassword: "weak",
+		})
+		req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBuffer(reqBody))
+		w := httptest.NewRecorder()
+
+		mockService.EXPECT().ResetPassword(gomock.Any(), "valid-token", "weak", gomock.Any(), gomock.Any()).
+			Return(fmt.Errorf("weak password: must be at least 8 characters"))
+
+		h.ResetPassword(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
 	})
 }

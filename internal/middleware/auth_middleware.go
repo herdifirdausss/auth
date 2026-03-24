@@ -42,14 +42,14 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Hash Token for Lookup
-		tokenHash := security.HashToken(token)
+		// 3. Hash Token for Lookup (NOT USED ANYMORE FOR DB LOOKUP, but kept for cache key transparency if needed)
+		// tokenHash := security.HashToken(token)
 
-		// 4. Check Cache
-		session, err := m.sessionCache.Get(r.Context(), tokenHash)
+		// 4. Check Cache (Use Session ID from claims)
+		session, err := m.sessionCache.Get(r.Context(), claims.Sid)
 		if err != nil || session == nil {
 			// 5. Cache Miss -> Query DB
-			dbSession, err := m.sessionRepo.FindByTokenHash(r.Context(), tokenHash)
+			dbSession, err := m.sessionRepo.FindByID(r.Context(), claims.Sid)
 			if err != nil || dbSession == nil {
 				writeUnauthorized(w, "Invalid session")
 				return
@@ -64,8 +64,8 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			if dbSession.TenantID != nil {
 				session.TenantID = *dbSession.TenantID
 			}
-			// Cache the found session
-			m.sessionCache.Set(r.Context(), tokenHash, session)
+			// Cache the found session using Sid
+			m.sessionCache.Set(r.Context(), claims.Sid, session)
 		}
 
 		// 6. Validate JWT claims against Session
@@ -83,7 +83,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// 7. Validate Idle Timeout
 		if session.IdleTimeoutAt.Before(time.Now()) {
 			m.sessionRepo.RevokeByID(r.Context(), session.SessionID, "idle_timeout", "system")
-			m.sessionCache.Delete(r.Context(), tokenHash)
+			m.sessionCache.Delete(r.Context(), session.SessionID)
 			writeUnauthorized(w, "Session timed out due to inactivity")
 			return
 		}
@@ -96,7 +96,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			m.sessionRepo.UpdateActivity(r.Context(), session.SessionID)
 			// Update local object and re-cache
 			session.IdleTimeoutAt = time.Now().Add(30 * time.Minute)
-			m.sessionCache.Set(r.Context(), tokenHash, session)
+			m.sessionCache.Set(r.Context(), session.SessionID, session)
 		}
 
 		// 9. Set Auth Context
@@ -104,7 +104,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			UserID:      session.UserID,
 			SessionID:   session.SessionID,
 			MFAVerified: session.MFAVerified,
-			TokenHash:   tokenHash,
+			TokenHash:   "", // No longer using tokenHash for basic auth
 			TenantID:    session.TenantID,
 		}
 

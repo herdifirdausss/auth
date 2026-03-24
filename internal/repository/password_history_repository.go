@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -16,10 +15,10 @@ type PasswordHistoryRepository interface {
 }
 
 type PostgresPasswordHistoryRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresPasswordHistoryRepository(db *pgxpool.Pool) *PostgresPasswordHistoryRepository {
+func NewPostgresPasswordHistoryRepository(db Pool) *PostgresPasswordHistoryRepository {
 	return &PostgresPasswordHistoryRepository{db: db}
 }
 

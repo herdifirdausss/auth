@@ -66,7 +66,8 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/auth/register" \
     -d '{
         "username": "'"$USERNAME"'",
         "email": "'"$EMAIL"'",
-        "password": "'"$PASSWORD"'"
+        "password": "'"$PASSWORD"'",
+        "tenant_slug": "my-tenant"
     }')
 BODY=$(echo "$RESPONSE" | sed -e '$ d')
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
