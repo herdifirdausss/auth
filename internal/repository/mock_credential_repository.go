@@ -11,10 +11,10 @@ package repository
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
 	model "github.com/herdifirdausss/auth/internal/model"
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,7 +43,7 @@ func (m *MockCredentialRepository) EXPECT() *MockCredentialRepositoryMockRecorde
 }
 
 // Create mocks base method.
-func (m *MockCredentialRepository) Create(ctx context.Context, tx *sql.Tx, cred *model.UserCredential) error {
+func (m *MockCredentialRepository) Create(ctx context.Context, tx pgx.Tx, cred *model.UserCredential) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, cred)
 	ret0, _ := ret[0].(error)
@@ -72,7 +72,7 @@ func (mr *MockCredentialRepositoryMockRecorder) FindByUserID(ctx, userID any) *g
 }
 
 // UpdatePassword mocks base method.
-func (m *MockCredentialRepository) UpdatePassword(ctx context.Context, tx *sql.Tx, userID, hash, salt string) error {
+func (m *MockCredentialRepository) UpdatePassword(ctx context.Context, tx pgx.Tx, userID, hash, salt string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdatePassword", ctx, tx, userID, hash, salt)
 	ret0, _ := ret[0].(error)
@@ -139,7 +139,7 @@ func (mr *MockSecurityTokenRepositoryMockRecorder) FindValidToken(ctx, tokenHash
 }
 
 // MarkUsed mocks base method.
-func (m *MockSecurityTokenRepository) MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error {
+func (m *MockSecurityTokenRepository) MarkUsed(ctx context.Context, tx pgx.Tx, tokenID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkUsed", ctx, tx, tokenID)
 	ret0, _ := ret[0].(error)

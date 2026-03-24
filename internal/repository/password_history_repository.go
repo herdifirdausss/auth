@@ -2,22 +2,24 @@ package repository
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
 type PasswordHistoryRepository interface {
 	GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error)
-	Create(ctx context.Context, tx *sql.Tx, userID, passwordHash string) error
+	Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error
 	Cleanup(ctx context.Context, userID string, keepCount int) error
 }
 
 type PostgresPasswordHistoryRepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
-func NewPostgresPasswordHistoryRepository(db *sql.DB) *PostgresPasswordHistoryRepository {
+func NewPostgresPasswordHistoryRepository(db *pgxpool.Pool) *PostgresPasswordHistoryRepository {
 	return &PostgresPasswordHistoryRepository{db: db}
 }
 
@@ -25,7 +27,7 @@ func (r *PostgresPasswordHistoryRepository) GetRecentPasswords(ctx context.Conte
 	query := `SELECT password_hash FROM user_password_history 
 	          WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`
 	
-	rows, err := r.db.QueryContext(ctx, query, userID, limit)
+	rows, err := r.db.Query(ctx, query, userID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("error getting recent passwords: %w", err)
 	}
@@ -42,14 +44,14 @@ func (r *PostgresPasswordHistoryRepository) GetRecentPasswords(ctx context.Conte
 	return hashes, nil
 }
 
-func (r *PostgresPasswordHistoryRepository) Create(ctx context.Context, tx *sql.Tx, userID, passwordHash string) error {
+func (r *PostgresPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error {
 	query := `INSERT INTO user_password_history (user_id, password_hash) VALUES ($1, $2)`
 	
 	var err error
 	if tx != nil {
-		_, err = tx.ExecContext(ctx, query, userID, passwordHash)
+		_, err = tx.Exec(ctx, query, userID, passwordHash)
 	} else {
-		_, err = r.db.ExecContext(ctx, query, userID, passwordHash)
+		_, err = r.db.Exec(ctx, query, userID, passwordHash)
 	}
 	
 	if err != nil {
@@ -67,9 +69,10 @@ func (r *PostgresPasswordHistoryRepository) Cleanup(ctx context.Context, userID 
 	              OFFSET $2
 	          )`
 	
-	_, err := r.db.ExecContext(ctx, query, userID, keepCount)
+	_, err := r.db.Exec(ctx, query, userID, keepCount)
 	if err != nil {
 		return fmt.Errorf("error cleaning up password history: %w", err)
 	}
 	return nil
 }
+

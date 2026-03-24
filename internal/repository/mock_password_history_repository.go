@@ -11,9 +11,9 @@ package repository
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -56,7 +56,7 @@ func (mr *MockPasswordHistoryRepositoryMockRecorder) Cleanup(ctx, userID, keepCo
 }
 
 // Create mocks base method.
-func (m *MockPasswordHistoryRepository) Create(ctx context.Context, tx *sql.Tx, userID, passwordHash string) error {
+func (m *MockPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, userID, passwordHash)
 	ret0, _ := ret[0].(error)

@@ -11,10 +11,10 @@ package repository
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
 	model "github.com/herdifirdausss/auth/internal/model"
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -43,7 +43,7 @@ func (m *MockUserRepository) EXPECT() *MockUserRepositoryMockRecorder {
 }
 
 // Create mocks base method.
-func (m *MockUserRepository) Create(ctx context.Context, tx *sql.Tx, user *model.User) error {
+func (m *MockUserRepository) Create(ctx context.Context, tx pgx.Tx, user *model.User) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, user)
 	ret0, _ := ret[0].(error)
@@ -131,7 +131,7 @@ func (mr *MockUserRepositoryMockRecorder) ResetFailedLoginAndUpdateLastLogin(ctx
 }
 
 // SetVerified mocks base method.
-func (m *MockUserRepository) SetVerified(ctx context.Context, tx *sql.Tx, userID string) error {
+func (m *MockUserRepository) SetVerified(ctx context.Context, tx pgx.Tx, userID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SetVerified", ctx, tx, userID)
 	ret0, _ := ret[0].(error)

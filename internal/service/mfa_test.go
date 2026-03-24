@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/repository"
@@ -94,9 +93,8 @@ func TestMFAService_Challenge(t *testing.T) {
 	sessRepo := repository.NewMockSessionRepository(ctrl)
 	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
 	rateLimiter := redis.NewMockRateLimiter(ctrl)
-
-	db, mockDB, _ := sqlmock.New()
-	defer db.Close()
+	mockDB := repository.NewMockTransactor(ctrl)
+	mockTx := repository.NewMockTx(ctrl)
 
 	jwtConfig := security.JWTConfig{
 		SecretKey:    []byte("test-secret-key-32-chars-long-!!!"),
@@ -104,7 +102,7 @@ func TestMFAService_Challenge(t *testing.T) {
 		AccessExpiry: 15 * time.Minute,
 	}
 
-	svc := NewMFAService(db, mfaRepo, nil, sessRepo, rfRepo, jwtConfig, rateLimiter)
+	svc := NewMFAService(mockDB, mfaRepo, nil, sessRepo, rfRepo, jwtConfig, rateLimiter)
 
 	userID := "user-1"
 	mfaToken, _ := security.GenerateMFAToken(jwtConfig, userID, 5*time.Minute)
@@ -130,14 +128,15 @@ func TestMFAService_Challenge(t *testing.T) {
 	})
 	mfaRepo.EXPECT().FindPrimaryActive(gomock.Any(), userID).Return(method, nil)
 
-	mockDB.ExpectBegin()
-	sessRepo.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	rfRepo.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
-	mockDB.ExpectCommit()
+	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
+	sessRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
+	rfRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
+	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
+	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
 	res, err := svc.Challenge(context.Background(), mfaToken, otpCode, "127.0.0.1", "ua", "")
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res.AccessToken)
 	assert.NotEmpty(t, res.RefreshToken)
-	assert.NoError(t, mockDB.ExpectationsWereMet())
 }
+

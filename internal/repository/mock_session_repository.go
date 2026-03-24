@@ -11,10 +11,10 @@ package repository
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
 	model "github.com/herdifirdausss/auth/internal/model"
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -58,7 +58,7 @@ func (mr *MockSessionRepositoryMockRecorder) CleanupExpired(ctx any) *gomock.Cal
 }
 
 // Create mocks base method.
-func (m *MockSessionRepository) Create(ctx context.Context, tx *sql.Tx, session *model.Session) error {
+func (m *MockSessionRepository) Create(ctx context.Context, tx pgx.Tx, session *model.Session) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, session)
 	ret0, _ := ret[0].(error)
@@ -102,7 +102,7 @@ func (mr *MockSessionRepositoryMockRecorder) FindByTokenHash(ctx, tokenHash any)
 }
 
 // RevokeAllByUser mocks base method.
-func (m *MockSessionRepository) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID, reason string) error {
+func (m *MockSessionRepository) RevokeAllByUser(ctx context.Context, tx pgx.Tx, userID, reason string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeAllByUser", ctx, tx, userID, reason)
 	ret0, _ := ret[0].(error)
@@ -183,7 +183,7 @@ func (mr *MockRefreshTokenRepositoryMockRecorder) CleanupExpired(ctx any) *gomoc
 }
 
 // Create mocks base method.
-func (m *MockRefreshTokenRepository) Create(ctx context.Context, tx *sql.Tx, token *model.RefreshToken) error {
+func (m *MockRefreshTokenRepository) Create(ctx context.Context, tx pgx.Tx, token *model.RefreshToken) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, token)
 	ret0, _ := ret[0].(error)
@@ -212,7 +212,7 @@ func (mr *MockRefreshTokenRepositoryMockRecorder) FindByTokenHash(ctx, tokenHash
 }
 
 // MarkUsed mocks base method.
-func (m *MockRefreshTokenRepository) MarkUsed(ctx context.Context, tx *sql.Tx, tokenID string) error {
+func (m *MockRefreshTokenRepository) MarkUsed(ctx context.Context, tx pgx.Tx, tokenID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MarkUsed", ctx, tx, tokenID)
 	ret0, _ := ret[0].(error)
@@ -226,7 +226,7 @@ func (mr *MockRefreshTokenRepositoryMockRecorder) MarkUsed(ctx, tx, tokenID any)
 }
 
 // RevokeAllByUser mocks base method.
-func (m *MockRefreshTokenRepository) RevokeAllByUser(ctx context.Context, tx *sql.Tx, userID string) error {
+func (m *MockRefreshTokenRepository) RevokeAllByUser(ctx context.Context, tx pgx.Tx, userID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeAllByUser", ctx, tx, userID)
 	ret0, _ := ret[0].(error)
@@ -240,7 +240,7 @@ func (mr *MockRefreshTokenRepositoryMockRecorder) RevokeAllByUser(ctx, tx, userI
 }
 
 // RevokeByFamily mocks base method.
-func (m *MockRefreshTokenRepository) RevokeByFamily(ctx context.Context, tx *sql.Tx, familyID string) error {
+func (m *MockRefreshTokenRepository) RevokeByFamily(ctx context.Context, tx pgx.Tx, familyID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeByFamily", ctx, tx, familyID)
 	ret0, _ := ret[0].(error)
@@ -254,7 +254,7 @@ func (mr *MockRefreshTokenRepositoryMockRecorder) RevokeByFamily(ctx, tx, family
 }
 
 // RevokeBySessionID mocks base method.
-func (m *MockRefreshTokenRepository) RevokeBySessionID(ctx context.Context, tx *sql.Tx, sessionID string) error {
+func (m *MockRefreshTokenRepository) RevokeBySessionID(ctx context.Context, tx pgx.Tx, sessionID string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RevokeBySessionID", ctx, tx, sessionID)
 	ret0, _ := ret[0].(error)

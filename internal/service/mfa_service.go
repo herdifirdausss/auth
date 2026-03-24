@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"os"
 	"time"
@@ -21,7 +20,7 @@ type MFAService interface {
 }
 
 type MFAServiceImpl struct {
-	db           *sql.DB
+	db           repository.Transactor
 	mfaRepo      repository.MFARepository
 	userRepo     repository.UserRepository
 	sessRepo     repository.SessionRepository
@@ -32,7 +31,7 @@ type MFAServiceImpl struct {
 }
 
 func NewMFAService(
-	db *sql.DB,
+	db repository.Transactor,
 	mfaRepo repository.MFARepository,
 	userRepo repository.UserRepository,
 	sessRepo repository.SessionRepository,
@@ -186,11 +185,11 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 	}
 
 	// Success: Create session in tx
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	session := &model.Session{
 		UserID:            userID,
@@ -226,7 +225,7 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -242,3 +241,4 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 		ExpiresIn:    900,
 	}, nil
 }
+

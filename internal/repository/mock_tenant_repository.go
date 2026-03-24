@@ -11,10 +11,10 @@ package repository
 
 import (
 	context "context"
-	sql "database/sql"
 	reflect "reflect"
 
 	model "github.com/herdifirdausss/auth/internal/model"
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -82,7 +82,7 @@ func (m *MockTenantMembershipRepository) EXPECT() *MockTenantMembershipRepositor
 }
 
 // Create mocks base method.
-func (m *MockTenantMembershipRepository) Create(ctx context.Context, tx *sql.Tx, membership *model.TenantMembership) error {
+func (m *MockTenantMembershipRepository) Create(ctx context.Context, tx pgx.Tx, membership *model.TenantMembership) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Create", ctx, tx, membership)
 	ret0, _ := ret[0].(error)

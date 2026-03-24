@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/herdifirdausss/auth/internal/config"
-	"github.com/herdifirdausss/auth/internal/database"
 	"github.com/herdifirdausss/auth/internal/handler"
+	infraCache "github.com/herdifirdausss/auth/internal/infrastructure/cache"
+	infraDB "github.com/herdifirdausss/auth/internal/infrastructure/database"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/infrastructure/telemetry"
 	"github.com/herdifirdausss/auth/internal/logger"
@@ -54,8 +54,12 @@ func main() {
 		}
 	}()
 
-	// 3. Database connection
-	db, err := database.NewDB()
+	// 3. Database connection (pgxpool)
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/auth?sslmode=disable"
+	}
+	db, err := infraDB.NewPostgresPool(ctx, dsn, l)
 	if err != nil {
 		slog.Error("Error connecting to database", "error", err)
 		os.Exit(1)
@@ -63,14 +67,12 @@ func main() {
 	defer db.Close()
 
 	// 4. Redis connection
-	redisClient, err := redis.NewRedisClient(config.RedisConfig{
-		Host: "localhost",
-		Port: "6379",
-	})
+	redisClient, err := infraCache.NewRedisClient(ctx, "localhost", "6379", 0, l)
 	if err != nil {
 		slog.Error("Error connecting to redis", "error", err)
 		os.Exit(1)
 	}
+	defer redisClient.Close()
 
 	slog.Info("Infrastructure initialized successfully", "env", env)
 
@@ -79,6 +81,8 @@ func main() {
 		AccessExpiry: 15 * time.Minute,
 		Issuer:       "auth-service",
 	}
+	
+	// Repositories
 	userRepo := repository.NewPostgresUserRepository(db)
 	credRepo := repository.NewPostgresCredentialRepository(db)
 	securityTokenRepo := repository.NewPostgresSecurityTokenRepository(db)
@@ -89,14 +93,43 @@ func main() {
 	refreshTokenRepo := repository.NewPostgresRefreshTokenRepository(db)
 	mfaRepo := repository.NewPostgresMFARepository(db)
 	passwordHistoryRepo := repository.NewPostgresPasswordHistoryRepository(db)
-	authService := service.NewAuthService(db, userRepo, credRepo, securityTokenRepo, securityEventRepo, tenantRepo, tenantMembershipRepo, sessionRepo, refreshTokenRepo, mfaRepo, passwordHistoryRepo, security.NewArgon2idHasher(), redis.NewRateLimiter(redisClient), redis.NewSessionCache(redisClient, time.Hour), jwtConfig)
-	mfaService := service.NewMFAService(db, mfaRepo, userRepo, sessionRepo, refreshTokenRepo, jwtConfig, redis.NewRateLimiter(redisClient))
+	
+	// Services
+	authService := service.NewAuthService(
+		db, 
+		userRepo, 
+		credRepo, 
+		securityTokenRepo, 
+		securityEventRepo, 
+		tenantRepo, 
+		tenantMembershipRepo, 
+		sessionRepo, 
+		refreshTokenRepo, 
+		mfaRepo, 
+		passwordHistoryRepo, 
+		security.NewArgon2idHasher(), 
+		redis.NewRateLimiter(redisClient), 
+		redis.NewSessionCache(redisClient, time.Hour), 
+		jwtConfig,
+	)
+	
+	mfaService := service.NewMFAService(
+		db, 
+		mfaRepo, 
+		userRepo, 
+		sessionRepo, 
+		refreshTokenRepo, 
+		jwtConfig, 
+		redis.NewRateLimiter(redisClient),
+	)
 
+	// Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	authMiddleware := middleware.NewAuthMiddleware(jwtConfig, sessionRepo, redis.NewSessionCache(redisClient, time.Hour), tenantMembershipRepo)
 	userHandler := handler.NewUserHandler()
 	mfaHandler := handler.NewMFAHandler(mfaService)
 
+	// Router
 	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware)
 
 	// Wrap Router with Global Middlewares
@@ -134,3 +167,4 @@ func main() {
 
 	slog.Info("Server exited gracefully")
 }
+
