@@ -33,7 +33,7 @@ func (m *CleanupManager) Start(ctx context.Context) {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
-	m.logger.Info("Cleanup manager started", "interval", m.interval)
+	m.logger.InfoContext(ctx, "Cleanup manager started", "interval", m.interval)
 
 	// Run once at start
 	m.runCleanup(ctx)
@@ -46,7 +46,7 @@ func (m *CleanupManager) Start(ctx context.Context) {
 			m.logger.Info("Cleanup manager stopping")
 			return
 		case <-ctx.Done():
-			m.logger.Info("Cleanup manager context done, stopping")
+			m.logger.InfoContext(ctx, "Cleanup manager context done, stopping")
 			return
 		}
 	}
@@ -58,19 +58,19 @@ func (m *CleanupManager) Stop() {
 
 func (m *CleanupManager) runCleanup(ctx context.Context) {
 	start := time.Now()
-	m.logger.Info("Starting background cleanup")
+	m.logger.InfoContext(ctx, "Starting background cleanup")
 
 	sessCount, err := m.sessionRepo.CleanupExpired(ctx)
 	if err != nil {
-		m.logger.Error("Error cleaning up sessions", "error", err)
+		m.logger.ErrorContext(ctx, "Error cleaning up sessions", "error", err)
 	}
 
 	rfCount, err := m.rfRepo.CleanupExpired(ctx)
 	if err != nil {
-		m.logger.Error("Error cleaning up refresh tokens", "error", err)
+		m.logger.ErrorContext(ctx, "Error cleaning up refresh tokens", "error", err)
 	}
 
-	m.logger.Info("Cleanup finished", 
+	m.logger.InfoContext(ctx, "Cleanup finished", 
 		"removed_sessions", sessCount, 
 		"removed_refresh_tokens", rfCount, 
 		"duration", time.Since(start))

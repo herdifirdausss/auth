@@ -9,9 +9,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/herdifirdausss/auth/internal/config"
-	"github.com/herdifirdausss/auth/internal/database"
+	"github.com/herdifirdausss/auth/internal/cron"
 	"github.com/herdifirdausss/auth/internal/handler"
+	infraCache "github.com/herdifirdausss/auth/internal/infrastructure/cache"
+	infraDB "github.com/herdifirdausss/auth/internal/infrastructure/database"
+	"github.com/herdifirdausss/auth/internal/infrastructure/metrics"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/infrastructure/telemetry"
 	"github.com/herdifirdausss/auth/internal/logger"
@@ -28,14 +30,11 @@ func main() {
 		env = "development"
 	}
 
-	// 1. Initialize Logger
-	l := logger.NewLogger(env)
-	slog.SetDefault(l)
-
-	// 2. Initialize Telemetry & Graceful Shutdown Context
+	// 1. Initialize Context for Startup
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 2. Initialize Telemetry FIRST (AS PER REQUIREMENT)
 	otelCfg := telemetry.Config{
 		ServiceName:    "auth-service",
 		ServiceVersion: "1.0.0",
@@ -46,39 +45,42 @@ func main() {
 		slog.Error("Failed to setup telemetry", "error", err)
 		os.Exit(1)
 	}
-	defer func() {
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := tel.Shutdown(shutdownCtx); err != nil {
-			slog.Error("Failed to shutdown telemetry", "error", err)
-		}
-	}()
 
-	// 3. Database connection
-	db, err := database.NewDB()
-	if err != nil {
-		slog.Error("Error connecting to database", "error", err)
-		os.Exit(1)
+	// 3. Initialize Logger
+	l := logger.NewLogger(env)
+	slog.SetDefault(l)
+
+	// 4. Initialize Prometheus Registry
+	reg := metrics.NewRegistry()
+
+	// 5. Infrastructure: Database (pgxpool with otelpgx)
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		dsn = "postgres://postgres:postgres@localhost:5432/auth?sslmode=disable"
 	}
-	defer db.Close()
-
-	// 4. Redis connection
-	redisClient, err := redis.NewRedisClient(config.RedisConfig{
-		Host: "localhost",
-		Port: "6379",
-	})
+	db, err := infraDB.NewPostgresPool(ctx, dsn, l)
 	if err != nil {
-		slog.Error("Error connecting to redis", "error", err)
+		l.Error("Error connecting to database", "error", err)
 		os.Exit(1)
 	}
 
-	slog.Info("Infrastructure initialized successfully", "env", env)
+	// 6. Infrastructure: Redis (with redisotel)
+	redisClient, err := infraCache.NewRedisClient(ctx, "localhost", "6379", 0, l)
+	if err != nil {
+		l.Error("Error connecting to redis", "error", err)
+		os.Exit(1)
+	}
 
+	l.Info("Infrastructure initialized successfully", "env", env)
+
+	// 7. Domain Configuration
 	jwtConfig := security.JWTConfig{
 		SecretKey:    []byte("randomjwtsecret"),
 		AccessExpiry: 15 * time.Minute,
 		Issuer:       "auth-service",
 	}
+	
+	// 8. Repositories
 	userRepo := repository.NewPostgresUserRepository(db)
 	credRepo := repository.NewPostgresCredentialRepository(db)
 	securityTokenRepo := repository.NewPostgresSecurityTokenRepository(db)
@@ -89,19 +91,55 @@ func main() {
 	refreshTokenRepo := repository.NewPostgresRefreshTokenRepository(db)
 	mfaRepo := repository.NewPostgresMFARepository(db)
 	passwordHistoryRepo := repository.NewPostgresPasswordHistoryRepository(db)
-	authService := service.NewAuthService(db, userRepo, credRepo, securityTokenRepo, securityEventRepo, tenantRepo, tenantMembershipRepo, sessionRepo, refreshTokenRepo, mfaRepo, passwordHistoryRepo, security.NewArgon2idHasher(), redis.NewRateLimiter(redisClient), redis.NewSessionCache(redisClient, time.Hour), jwtConfig)
-	mfaService := service.NewMFAService(db, mfaRepo, userRepo, sessionRepo, refreshTokenRepo, jwtConfig, redis.NewRateLimiter(redisClient))
+	
+	// 9. Services (Injecting specialized logger)
+	authService := service.NewAuthService(
+		db, 
+		userRepo, 
+		credRepo, 
+		securityTokenRepo, 
+		securityEventRepo, 
+		tenantRepo, 
+		tenantMembershipRepo, 
+		sessionRepo, 
+		refreshTokenRepo, 
+		mfaRepo, 
+		passwordHistoryRepo, 
+		security.NewArgon2idHasher(), 
+		redis.NewRateLimiter(redisClient), 
+		redis.NewSessionCache(redisClient, time.Hour), 
+		jwtConfig,
+		l,
+	)
+	
+	mfaService := service.NewMFAService(
+		db, 
+		mfaRepo, 
+		userRepo, 
+		sessionRepo, 
+		refreshTokenRepo, 
+		jwtConfig, 
+		redis.NewRateLimiter(redisClient),
+		l,
+	)
 
+	// 10. Background Workers (Cleanup Manager)
+	cleanupManager := cron.NewCleanupManager(sessionRepo, refreshTokenRepo, 1*time.Hour, l)
+	go cleanupManager.Start(ctx)
+
+	// 11. Handlers
 	authHandler := handler.NewAuthHandler(authService)
 	authMiddleware := middleware.NewAuthMiddleware(jwtConfig, sessionRepo, redis.NewSessionCache(redisClient, time.Hour), tenantMembershipRepo)
 	userHandler := handler.NewUserHandler()
 	mfaHandler := handler.NewMFAHandler(mfaService)
 
-	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware)
+	// 12. Router & HTTP Server
+	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware, reg)
 
 	// Wrap Router with Global Middlewares
 	var h http.Handler = r
 	h = middleware.RequestID(h)
+	h = middleware.RequestLogger(h)
 	h = middleware.SecurityHeaders(h)
 	h = middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins: []string{"*"},
@@ -115,22 +153,46 @@ func main() {
 		Handler: h,
 	}
 
+	// 13. Start HTTP Server
 	go func() {
-		slog.Info("Starting server", "addr", addr)
+		l.Info("Starting server", "addr", addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("Server failed", "error", err)
+			l.Error("Server failed", "error", err)
 			os.Exit(1)
 		}
 	}()
 
+	// 14. Graceful Shutdown Flow
 	<-ctx.Done()
-	slog.Info("Shutting down server...")
+	l.Info("Shutdown signal received")
 
+	// Order: telemetry -> scheduler -> httpServer
+	
+	// A. Telemetry Shutdown (Trace & Metric Providers)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("Server forced to shutdown", "error", err)
+	
+	l.Info("Shutting down telemetry...")
+	if err := tel.Shutdown(shutdownCtx); err != nil {
+		l.Error("Failed to shutdown telemetry", "error", err)
 	}
 
-	slog.Info("Server exited gracefully")
+	// B. Scheduler Shutdown
+	l.Info("Stopping background workers...")
+	cleanupManager.Stop()
+
+	// C. HTTP Server Shutdown
+	l.Info("Shutting down HTTP server...")
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		l.Error("Server forced to shutdown", "error", err)
+	}
+
+	// D. Infrastructure Close
+	l.Info("Closing infrastructure connections...")
+	redisClient.Close()
+	db.Close()
+
+	l.Info("Server exited gracefully")
 }
+
+

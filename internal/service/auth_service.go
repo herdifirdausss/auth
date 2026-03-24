@@ -4,9 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -17,7 +17,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/validator"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
 	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error
@@ -30,7 +30,7 @@ type AuthService interface {
 }
 
 type AuthServiceImpl struct {
-	db                  *sql.DB
+	db                  repository.Transactor
 	userRepo            repository.UserRepository
 	credRepo            repository.CredentialRepository
 	tokenRepo           repository.SecurityTokenRepository
@@ -45,10 +45,11 @@ type AuthServiceImpl struct {
 	rateLimiter         redis.RateLimiter
 	sessionCache        redis.SessionCache
 	jwtConfig           security.JWTConfig
+	logger              *slog.Logger
 }
 
 func NewAuthService(
-	db *sql.DB,
+	db repository.Transactor,
 	userRepo repository.UserRepository,
 	credRepo repository.CredentialRepository,
 	tokenRepo repository.SecurityTokenRepository,
@@ -63,6 +64,7 @@ func NewAuthService(
 	rateLimiter redis.RateLimiter,
 	sessionCache redis.SessionCache,
 	jwtConfig security.JWTConfig,
+	logger *slog.Logger,
 ) *AuthServiceImpl {
 	return &AuthServiceImpl{
 		db:                  db,
@@ -80,6 +82,7 @@ func NewAuthService(
 		rateLimiter:         rateLimiter,
 		sessionCache:        sessionCache,
 		jwtConfig:           jwtConfig,
+		logger:              logger,
 	}
 }
 
@@ -114,11 +117,11 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 	}
 
 	// 4. Transaction
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	user := &model.User{
 		Email:      req.Email,
@@ -160,7 +163,7 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 		}
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -193,7 +196,7 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 	s.eventRepo.Create(ctx, event)
 
 	// TODO: Send email
-	fmt.Printf("Verification token for %s: %s\n", req.Email, tokenStr)
+	s.logger.InfoContext(ctx, "Verification token generated", "email", req.Email, "token", tokenStr)
 
 	return &model.RegisterResponse{
 		Status:  "success",
@@ -215,11 +218,11 @@ func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAd
 	}
 
 	// 3. Transaction
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// 4. Mark used
 	if err := s.tokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
@@ -231,7 +234,7 @@ func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAd
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 
@@ -344,11 +347,11 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 	refreshHash := security.HashToken(refreshToken)
 	familyID, _ := security.GenerateSecureToken(16)
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// 7. MFA Check
 	mfaMethod, err := s.mfaRepo.FindPrimaryActive(ctx, user.ID)
@@ -360,7 +363,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		if err != nil {
 			return nil, err
 		}
-		if err := tx.Commit(); err != nil { // Still need to commit tx if any (though usually no tx here)
+		if err := tx.Commit(ctx); err != nil { // Still need to commit tx if any (though usually no tx here)
 			return nil, err
 		}
 		return &model.LoginResponse{
@@ -399,7 +402,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -482,16 +485,16 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 		})
 
 		// Revoke the entire family and the session
-		tx, err := s.db.BeginTx(ctx, nil)
+		tx, err := s.db.Begin(ctx)
 		if err != nil {
 			return nil, err
 		}
-		defer tx.Rollback()
+		defer tx.Rollback(ctx)
 
 		s.refreshTokenRepo.RevokeByFamily(ctx, tx, token.FamilyID)
 		s.sessionRepo.RevokeByID(ctx, token.SessionID, "refresh_token_reuse", "system")
 
-		if err := tx.Commit(); err != nil {
+		if err := tx.Commit(ctx); err != nil {
 			return nil, err
 		}
 
@@ -503,11 +506,11 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 	}
 
 	// 6. ROTATION
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// 6.1 Mark current token as used
 	if err := s.refreshTokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
@@ -537,7 +540,7 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -612,7 +615,7 @@ func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua stri
 	}
 
 	// 4. TODO: Send Email
-	fmt.Printf("Password reset token for %s: %s\n", email, rawToken)
+	s.logger.InfoContext(ctx, "Password reset token generated", "email", email, "token", rawToken)
 
 	// 5. Security Event
 	s.eventRepo.Create(ctx, &model.SecurityEvent{
@@ -678,11 +681,11 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 	}
 
 	// 6. Transaction
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	// 6a. Update Password
 	if err := s.credRepo.UpdatePassword(ctx, tx, token.UserID, hash, salt); err != nil {
@@ -709,7 +712,7 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 		return err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 
@@ -741,7 +744,7 @@ func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHa
 	if s.sessionCache != nil {
 		if err := s.sessionCache.Delete(ctx, tokenHash); err != nil {
 			// Log error but don't fail logout
-			fmt.Printf("Error deleting session cache: %v\n", err)
+			s.logger.ErrorContext(ctx, "Error deleting session cache", "error", err)
 		}
 	}
 

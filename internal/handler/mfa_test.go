@@ -7,17 +7,17 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/middleware"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/herdifirdausss/auth/internal/service"
 	"go.uber.org/mock/gomock"
 )
 
 func TestMFAHandler_Setup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mfaSvc := service.NewMockMFAService(ctrl)
+	mfaSvc := mocks.NewMockMFAService(ctrl)
 	h := NewMFAHandler(mfaSvc)
 
 	w := httptest.NewRecorder()
@@ -36,7 +36,7 @@ func TestMFAHandler_Setup(t *testing.T) {
 func TestMFAHandler_VerifySetup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mfaSvc := service.NewMockMFAService(ctrl)
+	mfaSvc := mocks.NewMockMFAService(ctrl)
 	h := NewMFAHandler(mfaSvc)
 
 	reqBody, _ := json.Marshal(model.VerifySetupRequest{OTPCode: "123456"})
@@ -56,7 +56,7 @@ func TestMFAHandler_VerifySetup(t *testing.T) {
 func TestMFAHandler_Challenge(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mfaSvc := service.NewMockMFAService(ctrl)
+	mfaSvc := mocks.NewMockMFAService(ctrl)
 	h := NewMFAHandler(mfaSvc)
 
 	reqBody, _ := json.Marshal(model.ChallengeRequest{MFAToken: "mfa-token", OTPCode: "123456"})

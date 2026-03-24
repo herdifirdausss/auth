@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/herdifirdausss/auth/internal/repository"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -15,7 +15,7 @@ func TestAuditLog_PostRequest_Logged(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
@@ -31,7 +31,7 @@ func TestAuditLog_GetRequest_Skipped(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/users", nil)
@@ -47,7 +47,7 @@ func TestAuditLog_UserContext_Included(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/profile", nil)
@@ -68,7 +68,7 @@ func TestAuditLog_IPAddress_Captured(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
@@ -85,7 +85,7 @@ func TestAuditLog_DBError_NoBlock(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", nil)
@@ -99,7 +99,7 @@ func TestAuditLog_DBError_NoBlock(t *testing.T) {
 func TestAuditLog_HeadRequest_Skipped(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 	req := httptest.NewRequest(http.MethodHead, "/auth/users", nil)
 	w := httptest.NewRecorder()
@@ -109,7 +109,7 @@ func TestAuditLog_HeadRequest_Skipped(t *testing.T) {
 func TestAuditLog_OptionsRequest_Skipped(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockRepo := repository.NewMockAuditLogRepository(ctrl)
+	mockRepo := mocks.NewMockAuditLogRepository(ctrl)
 	handler := AuditLog(mockRepo)(dummyHandler)
 	req := httptest.NewRequest(http.MethodOptions, "/auth/users", nil)
 	w := httptest.NewRecorder()
