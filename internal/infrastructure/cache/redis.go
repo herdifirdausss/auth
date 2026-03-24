@@ -30,7 +30,7 @@ func NewRedisClient(ctx context.Context, host, port string, db int, logger *slog
 	}
 
 	opts := client.Options()
-	logger.Info("Redis client initialized",
+	logger.InfoContext(ctx, "Redis client initialized",
 		"addr", addr,
 		"db", opts.DB,
 		"pool_size", opts.PoolSize,

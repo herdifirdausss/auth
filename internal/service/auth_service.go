@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -44,6 +45,7 @@ type AuthServiceImpl struct {
 	rateLimiter         redis.RateLimiter
 	sessionCache        redis.SessionCache
 	jwtConfig           security.JWTConfig
+	logger              *slog.Logger
 }
 
 func NewAuthService(
@@ -62,6 +64,7 @@ func NewAuthService(
 	rateLimiter redis.RateLimiter,
 	sessionCache redis.SessionCache,
 	jwtConfig security.JWTConfig,
+	logger *slog.Logger,
 ) *AuthServiceImpl {
 	return &AuthServiceImpl{
 		db:                  db,
@@ -79,6 +82,7 @@ func NewAuthService(
 		rateLimiter:         rateLimiter,
 		sessionCache:        sessionCache,
 		jwtConfig:           jwtConfig,
+		logger:              logger,
 	}
 }
 
@@ -192,7 +196,7 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 	s.eventRepo.Create(ctx, event)
 
 	// TODO: Send email
-	fmt.Printf("Verification token for %s: %s\n", req.Email, tokenStr)
+	s.logger.InfoContext(ctx, "Verification token generated", "email", req.Email, "token", tokenStr)
 
 	return &model.RegisterResponse{
 		Status:  "success",
@@ -611,7 +615,7 @@ func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua stri
 	}
 
 	// 4. TODO: Send Email
-	fmt.Printf("Password reset token for %s: %s\n", email, rawToken)
+	s.logger.InfoContext(ctx, "Password reset token generated", "email", email, "token", rawToken)
 
 	// 5. Security Event
 	s.eventRepo.Create(ctx, &model.SecurityEvent{
@@ -740,7 +744,7 @@ func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHa
 	if s.sessionCache != nil {
 		if err := s.sessionCache.Delete(ctx, tokenHash); err != nil {
 			// Log error but don't fail logout
-			fmt.Printf("Error deleting session cache: %v\n", err)
+			s.logger.ErrorContext(ctx, "Error deleting session cache", "error", err)
 		}
 	}
 

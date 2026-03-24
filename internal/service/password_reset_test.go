@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
@@ -27,6 +28,7 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 		tokenRepo:   tokenRepo,
 		eventRepo:   eventRepo,
 		rateLimiter: rateLimiter,
+		logger:      slog.Default(),
 	}
 
 	email := "test@example.com"
@@ -94,6 +96,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 			sessionRepo:         sessionRepo,
 			eventRepo:           eventRepo,
 			hasher:              hasher,
+			logger:              slog.Default(),
 		}
 
 		token := &model.SecurityToken{
@@ -132,6 +135,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 			tokenRepo:           tokenRepo,
 			passwordHistoryRepo: historyRepo,
 			hasher:              hasher,
+			logger:              slog.Default(),
 		}
 
 		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
