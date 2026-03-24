@@ -56,7 +56,7 @@ func main() {
 	// 5. Infrastructure: Database (pgxpool with otelpgx)
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://postgres:postgres@localhost:5432/auth?sslmode=disable"
+		dsn = "postgres://postgres:postgres@localhost:5432/auth_db?sslmode=disable"
 	}
 	db, err := infraDB.NewPostgresPool(ctx, dsn, l)
 	if err != nil {
@@ -79,7 +79,7 @@ func main() {
 		AccessExpiry: 15 * time.Minute,
 		Issuer:       "auth-service",
 	}
-	
+
 	// 8. Repositories
 	userRepo := repository.NewPostgresUserRepository(db)
 	credRepo := repository.NewPostgresCredentialRepository(db)
@@ -91,34 +91,34 @@ func main() {
 	refreshTokenRepo := repository.NewPostgresRefreshTokenRepository(db)
 	mfaRepo := repository.NewPostgresMFARepository(db)
 	passwordHistoryRepo := repository.NewPostgresPasswordHistoryRepository(db)
-	
+
 	// 9. Services (Injecting specialized logger)
 	authService := service.NewAuthService(
-		db, 
-		userRepo, 
-		credRepo, 
-		securityTokenRepo, 
-		securityEventRepo, 
-		tenantRepo, 
-		tenantMembershipRepo, 
-		sessionRepo, 
-		refreshTokenRepo, 
-		mfaRepo, 
-		passwordHistoryRepo, 
-		security.NewArgon2idHasher(), 
-		redis.NewRateLimiter(redisClient), 
-		redis.NewSessionCache(redisClient, time.Hour), 
+		db,
+		userRepo,
+		credRepo,
+		securityTokenRepo,
+		securityEventRepo,
+		tenantRepo,
+		tenantMembershipRepo,
+		sessionRepo,
+		refreshTokenRepo,
+		mfaRepo,
+		passwordHistoryRepo,
+		security.NewArgon2idHasher(),
+		redis.NewRateLimiter(redisClient),
+		redis.NewSessionCache(redisClient, time.Hour),
 		jwtConfig,
 		l,
 	)
-	
+
 	mfaService := service.NewMFAService(
-		db, 
-		mfaRepo, 
-		userRepo, 
-		sessionRepo, 
-		refreshTokenRepo, 
-		jwtConfig, 
+		db,
+		mfaRepo,
+		userRepo,
+		sessionRepo,
+		refreshTokenRepo,
+		jwtConfig,
 		redis.NewRateLimiter(redisClient),
 		l,
 	)
@@ -167,11 +167,11 @@ func main() {
 	l.Info("Shutdown signal received")
 
 	// Order: telemetry -> scheduler -> httpServer
-	
+
 	// A. Telemetry Shutdown (Trace & Metric Providers)
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	l.Info("Shutting down telemetry...")
 	if err := tel.Shutdown(shutdownCtx); err != nil {
 		l.Error("Failed to shutdown telemetry", "error", err)
@@ -194,5 +194,3 @@ func main() {
 
 	l.Info("Server exited gracefully")
 }
-
-

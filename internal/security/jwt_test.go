@@ -3,6 +3,8 @@ package security
 import (
 	"testing"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestJWT(t *testing.T) {
@@ -68,5 +70,19 @@ func TestGenerateMFAToken(t *testing.T) {
 
 	if parsed.Sub != "user-123" {
 		t.Error("sub mismatch")
+	}
+}
+func TestJWT_AlgDowngrade(t *testing.T) {
+	cfg := JWTConfig{
+		SecretKey: []byte("test-secret"),
+	}
+
+	// Create a token with alg: "none"
+	token := jwt.NewWithClaims(jwt.SigningMethodNone, jwt.MapClaims{"sub": "user-1"})
+	tokenString, _ := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
+
+	_, err := ValidateAccessToken(cfg, tokenString)
+	if err == nil {
+		t.Error("expected error for alg: none")
 	}
 }

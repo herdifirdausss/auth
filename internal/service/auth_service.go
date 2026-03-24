@@ -279,7 +279,11 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		return nil, err
 	}
 	if user == nil {
-		return nil, fmt.Errorf("invalid email or password") // generic
+		// Use a fixed dummy hash and salt to ensure consistent timing
+		dummyHash := "0000000000000000000000000000000000000000000000000000000000000000"
+		dummySalt := "00000000000000000000000000000000"
+		_, _ = s.hasher.Verify(req.Password, dummyHash, dummySalt)
+		return nil, fmt.Errorf("invalid email or password")
 	}
 
 	// 4. Check Suspended
