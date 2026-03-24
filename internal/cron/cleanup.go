@@ -2,7 +2,7 @@ package cron
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/herdifirdausss/auth/internal/repository"
@@ -13,9 +13,10 @@ type CleanupManager struct {
 	rfRepo      repository.RefreshTokenRepository
 	interval    time.Duration
 	stopChan    chan struct{}
+	logger      *slog.Logger
 }
 
-func NewCleanupManager(sessRepo repository.SessionRepository, rfRepo repository.RefreshTokenRepository, interval time.Duration) *CleanupManager {
+func NewCleanupManager(sessRepo repository.SessionRepository, rfRepo repository.RefreshTokenRepository, interval time.Duration, l *slog.Logger) *CleanupManager {
 	if interval == 0 {
 		interval = 1 * time.Hour
 	}
@@ -24,6 +25,7 @@ func NewCleanupManager(sessRepo repository.SessionRepository, rfRepo repository.
 		rfRepo:      rfRepo,
 		interval:    interval,
 		stopChan:    make(chan struct{}),
+		logger:      l,
 	}
 }
 
@@ -31,7 +33,7 @@ func (m *CleanupManager) Start(ctx context.Context) {
 	ticker := time.NewTicker(m.interval)
 	defer ticker.Stop()
 
-	log.Printf("Cleanup manager started with interval %v", m.interval)
+	m.logger.InfoContext(ctx, "Cleanup manager started", "interval", m.interval)
 
 	// Run once at start
 	m.runCleanup(ctx)
@@ -41,10 +43,10 @@ func (m *CleanupManager) Start(ctx context.Context) {
 		case <-ticker.C:
 			m.runCleanup(ctx)
 		case <-m.stopChan:
-			log.Println("Cleanup manager stopping...")
+			m.logger.Info("Cleanup manager stopping")
 			return
 		case <-ctx.Done():
-			log.Println("Cleanup manager context done, stopping...")
+			m.logger.InfoContext(ctx, "Cleanup manager context done, stopping")
 			return
 		}
 	}
@@ -56,18 +58,20 @@ func (m *CleanupManager) Stop() {
 
 func (m *CleanupManager) runCleanup(ctx context.Context) {
 	start := time.Now()
-	log.Println("Starting background cleanup...")
+	m.logger.InfoContext(ctx, "Starting background cleanup")
 
 	sessCount, err := m.sessionRepo.CleanupExpired(ctx)
 	if err != nil {
-		log.Printf("Error cleaning up sessions: %v", err)
+		m.logger.ErrorContext(ctx, "Error cleaning up sessions", "error", err)
 	}
 
 	rfCount, err := m.rfRepo.CleanupExpired(ctx)
 	if err != nil {
-		log.Printf("Error cleaning up refresh tokens: %v", err)
+		m.logger.ErrorContext(ctx, "Error cleaning up refresh tokens", "error", err)
 	}
 
-	log.Printf("Cleanup finished. Removed %d sessions and %d refresh tokens. Duration: %v", 
-		sessCount, rfCount, time.Since(start))
+	m.logger.InfoContext(ctx, "Cleanup finished", 
+		"removed_sessions", sessCount, 
+		"removed_refresh_tokens", rfCount, 
+		"duration", time.Since(start))
 }

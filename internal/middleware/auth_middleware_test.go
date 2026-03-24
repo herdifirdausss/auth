@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/herdifirdausss/auth/internal/repository"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -16,7 +16,7 @@ func TestAuthMiddleware_HasPermission(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	membershipRepo := repository.NewMockTenantMembershipRepository(ctrl)
+	membershipRepo := mocks.NewMockTenantMembershipRepository(ctrl)
 	m := NewAuthMiddleware(security.JWTConfig{}, nil, nil, membershipRepo)
 
 	t.Run("Success_ExactMatch", func(t *testing.T) {
