@@ -9,7 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=redis
+//go:generate mockgen -source=$GOFILE -destination=../../mocks/mock_$GOFILE -package=mocks
 type SessionCache interface {
 	Set(ctx context.Context, tokenHash string, session *CachedSession) error
 	Get(ctx context.Context, tokenHash string) (*CachedSession, error)

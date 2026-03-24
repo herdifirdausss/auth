@@ -48,7 +48,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusNotFound, err.Error())
 			return
 		}
-		h.respondError(w, http.StatusInternalServerError, "Internal server error")
+		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -231,9 +231,9 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 	err := h.authService.ResetPassword(r.Context(), req.Token, req.NewPassword, ipAddress, userAgent)
 	if err != nil {
-		if strings.Contains(err.Error(), "invalid or expired") || 
-		   strings.Contains(err.Error(), "weak password") || 
-		   strings.Contains(err.Error(), "recently used") {
+		if strings.Contains(err.Error(), "invalid or expired") ||
+			strings.Contains(err.Error(), "weak password") ||
+			strings.Contains(err.Error(), "recently used") {
 			h.respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
