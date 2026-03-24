@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type CredentialRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, cred *model.UserCredential) error
 	FindByUserID(ctx context.Context, userID string) (*model.UserCredential, error)
@@ -80,7 +80,7 @@ func (r *PostgresCredentialRepository) UpdatePassword(ctx context.Context, tx pg
 	return nil
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type SecurityTokenRepository interface {
 	Create(ctx context.Context, token *model.SecurityToken) error
 	FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error)
@@ -141,7 +141,7 @@ func (r *PostgresSecurityTokenRepository) MarkUsed(ctx context.Context, tx pgx.T
 	return nil
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+// directive for the whole file is already at the top
 type SecurityEventRepository interface {
 	Create(ctx context.Context, event *model.SecurityEvent) error
 }

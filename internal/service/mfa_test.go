@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"github.com/xlzd/gotp"
@@ -22,8 +22,8 @@ func TestMFAService_SetupTOTP(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mfaRepo := repository.NewMockMFARepository(ctrl)
-	rateLimiter := redis.NewMockRateLimiter(ctrl)
+	mfaRepo := mocks.NewMockMFARepository(ctrl)
+	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 
 	jwtConfig := security.JWTConfig{
 		SecretKey: []byte("test-secret"),
@@ -47,8 +47,8 @@ func TestMFAService_VerifySetup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mfaRepo := repository.NewMockMFARepository(ctrl)
-	rateLimiter := redis.NewMockRateLimiter(ctrl)
+	mfaRepo := mocks.NewMockMFARepository(ctrl)
+	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 
 	jwtConfig := security.JWTConfig{
 		SecretKey: []byte("test-secret"),
@@ -89,12 +89,12 @@ func TestMFAService_Challenge(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mfaRepo := repository.NewMockMFARepository(ctrl)
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	rateLimiter := redis.NewMockRateLimiter(ctrl)
-	mockDB := repository.NewMockTransactor(ctrl)
-	mockTx := repository.NewMockTx(ctrl)
+	mfaRepo := mocks.NewMockMFARepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	rateLimiter := mocks.NewMockRateLimiter(ctrl)
+	mockDB := mocks.NewMockTransactor(ctrl)
+	mockTx := mocks.NewMockTx(ctrl)
 
 	jwtConfig := security.JWTConfig{
 		SecretKey:    []byte("test-secret-key-32-chars-long-!!!"),

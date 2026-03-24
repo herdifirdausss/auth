@@ -12,6 +12,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/handler"
 	infraCache "github.com/herdifirdausss/auth/internal/infrastructure/cache"
 	infraDB "github.com/herdifirdausss/auth/internal/infrastructure/database"
+	"github.com/herdifirdausss/auth/internal/infrastructure/metrics"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/infrastructure/telemetry"
 	"github.com/herdifirdausss/auth/internal/logger"
@@ -46,6 +47,9 @@ func main() {
 		slog.Error("Failed to setup telemetry", "error", err)
 		os.Exit(1)
 	}
+
+	// Metrics Registry
+	reg := metrics.NewRegistry()
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -130,7 +134,7 @@ func main() {
 	mfaHandler := handler.NewMFAHandler(mfaService)
 
 	// Router
-	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware)
+	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware, reg)
 
 	// Wrap Router with Global Middlewares
 	var h http.Handler = r

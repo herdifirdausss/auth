@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -17,10 +17,10 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	userRepo := repository.NewMockUserRepository(ctrl)
-	tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
-	rateLimiter := redis.NewMockRateLimiter(ctrl)
+	userRepo := mocks.NewMockUserRepository(ctrl)
+	tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 
 	s := &AuthServiceImpl{
 		userRepo:    userRepo,
@@ -76,15 +76,15 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := repository.NewMockTransactor(ctrl)
-		mockTx := repository.NewMockTx(ctrl)
+		mockDB := mocks.NewMockTransactor(ctrl)
+		mockTx := mocks.NewMockTx(ctrl)
 
-		tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-		credRepo := repository.NewMockCredentialRepository(ctrl)
-		historyRepo := repository.NewMockPasswordHistoryRepository(ctrl)
-		sessionRepo := repository.NewMockSessionRepository(ctrl)
-		eventRepo := repository.NewMockSecurityEventRepository(ctrl)
-		hasher := security.NewMockPasswordHasher(ctrl)
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		credRepo := mocks.NewMockCredentialRepository(ctrl)
+		historyRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
+		sessionRepo := mocks.NewMockSessionRepository(ctrl)
+		eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+		hasher := mocks.NewMockPasswordHasher(ctrl)
 
 		s := &AuthServiceImpl{
 			db:                  mockDB,
@@ -124,9 +124,9 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-		historyRepo := repository.NewMockPasswordHistoryRepository(ctrl)
-		hasher := security.NewMockPasswordHasher(ctrl)
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		historyRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
+		hasher := mocks.NewMockPasswordHasher(ctrl)
 
 		s := &AuthServiceImpl{
 			tokenRepo:           tokenRepo,

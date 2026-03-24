@@ -16,7 +16,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/validator"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
 	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error

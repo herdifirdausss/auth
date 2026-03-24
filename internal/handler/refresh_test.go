@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
-	"github.com/herdifirdausss/auth/internal/service"
 )
 
 func TestRefreshHandler_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockService := service.NewMockAuthService(ctrl)
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	res := &model.LoginResponse{
@@ -59,7 +59,7 @@ func TestRefreshHandler_Success(t *testing.T) {
 func TestRefreshHandler_NoCookie(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockService := service.NewMockAuthService(ctrl)
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
@@ -73,7 +73,7 @@ func TestRefreshHandler_NoCookie(t *testing.T) {
 func TestRefreshHandler_ReuseDetected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockService := service.NewMockAuthService(ctrl)
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	mockService.EXPECT().RefreshToken(gomock.Any(), "reused-token", gomock.Any(), gomock.Any()).

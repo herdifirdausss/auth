@@ -4,8 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/herdifirdausss/auth/internal/repository"
-	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -14,10 +13,10 @@ func TestAuthService_Logout(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
-	sessionCache := redis.NewMockSessionCache(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+	sessionCache := mocks.NewMockSessionCache(ctrl)
 
 	s := &AuthServiceImpl{
 		sessionRepo:      sessRepo,
@@ -45,9 +44,9 @@ func TestAuthService_LogoutAll(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 
 	s := &AuthServiceImpl{
 		sessionRepo:      sessRepo,

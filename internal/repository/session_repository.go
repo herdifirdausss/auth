@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type SessionRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, session *model.Session) error
 	FindByID(ctx context.Context, id string) (*model.Session, error)
@@ -124,7 +124,7 @@ func (r *PostgresSessionRepository) UpdateActivity(ctx context.Context, sessionI
 	return err
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+// directive for the whole file is already at the top
 type RefreshTokenRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, token *model.RefreshToken) error
 	FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error)

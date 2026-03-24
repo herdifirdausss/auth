@@ -9,7 +9,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/security"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type PermissionService interface {
 	HasPermission(ctx context.Context, userID, tenantID, required string) (bool, error)
 	GetUserPermissions(ctx context.Context, userID, tenantID string) ([]string, error)
