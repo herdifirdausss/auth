@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/unicode/norm"
+
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/repository"
@@ -87,6 +89,9 @@ func NewAuthService(
 }
 
 func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error) {
+	// 0. Normalize Email
+	req.Email = strings.ToLower(norm.NFC.String(req.Email))
+
 	// 1. Validate
 	valErrors := validator.ValidateRegisterRequest(req)
 	if len(valErrors) > 0 {
@@ -253,6 +258,9 @@ func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAd
 }
 
 func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip string, userAgent string) (*model.LoginResponse, error) {
+	// 0. Normalize Email
+	req.Email = strings.ToLower(norm.NFC.String(req.Email))
+
 	// 1. Rate Limit IP
 	res, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
 		Key:      fmt.Sprintf("rate_limit:login:ip:%s", ip),
@@ -278,8 +286,15 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 	if err != nil {
 		return nil, err
 	}
+
+	// 3a. User not found - still proceed to "dummy" hash to prevent timing attacks
 	if user == nil {
-		return nil, fmt.Errorf("invalid email or password") // generic
+		// Use a fixed dummy hash and salt to ensure consistent timing
+		// These should be long enough and look like real Argon2id outputs
+		dummyHash := "0000000000000000000000000000000000000000000000000000000000000000"
+		dummySalt := "00000000000000000000000000000000"
+		_, _ = s.hasher.Verify(req.Password, dummyHash, dummySalt)
+		return nil, fmt.Errorf("invalid email or password")
 	}
 
 	// 4. Check Suspended
@@ -580,6 +595,9 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 }
 
 func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua string) error {
+	// 0. Normalize Email
+	email = strings.ToLower(norm.NFC.String(email))
+
 	// 1. Anti-spam / Cooldown (Distributed Lock)
 	lockRes, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
 		Key:      fmt.Sprintf("password_reset_lock:%s", strings.ToLower(email)),
