@@ -2,6 +2,7 @@ package security
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"fmt"
 
@@ -56,15 +57,5 @@ func (h *Argon2idHasher) Verify(password, hash, salt string) (bool, error) {
 
 	newHash := argon2.IDKey([]byte(password), saltBytes, h.Iterations, h.Memory, h.Parallelism, h.KeyLength)
 
-	if len(hashBytes) != len(newHash) {
-		return false, nil
-	}
-
-	for i := range hashBytes {
-		if hashBytes[i] != newHash[i] {
-			return false, nil
-		}
-	}
-
-	return true, nil
+	return subtle.ConstantTimeCompare(hashBytes, newHash) == 1, nil
 }
