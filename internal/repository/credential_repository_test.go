@@ -21,7 +21,6 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 	ctx := context.Background()
 
 	cred := &model.UserCredential{
-		ID:           "cred-1",
 		UserID:       "user-1",
 		PasswordHash: "hash",
 		PasswordSalt: "salt",
@@ -33,9 +32,9 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 		updatedAt := time.Now()
 
 		mock.ExpectQuery(`INSERT INTO user_credentials`).
-			WithArgs(cred.ID, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
+			WithArgs(cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
 			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).
-				AddRow(cred.ID, createdAt, updatedAt))
+				AddRow(createdAt, updatedAt))
 
 		err := repo.Create(ctx, nil, cred)
 		assert.NoError(t, err)
@@ -47,9 +46,9 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 		tx, _ := mock.Begin(ctx)
 
 		mock.ExpectQuery(`INSERT INTO user_credentials`).
-			WithArgs(cred.ID, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
+			WithArgs(cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
 			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).
-				AddRow(cred.ID, time.Now(), time.Now()))
+				AddRow(time.Now(), time.Now()))
 
 		err := repo.Create(ctx, tx, cred)
 		assert.NoError(t, err)
@@ -57,7 +56,7 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 
 	t.Run("Error", func(t *testing.T) {
 		mock.ExpectQuery(`INSERT INTO user_credentials`).
-			WithArgs(cred.ID, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
+			WithArgs(cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
 			WillReturnError(assert.AnError)
 
 		err := repo.Create(ctx, nil, cred)

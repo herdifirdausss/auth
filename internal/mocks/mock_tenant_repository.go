@@ -81,6 +81,20 @@ func (m *MockTenantMembershipRepository) EXPECT() *MockTenantMembershipRepositor
 	return m.recorder
 }
 
+// ActivateByUserID mocks base method.
+func (m *MockTenantMembershipRepository) ActivateByUserID(ctx context.Context, tx pgx.Tx, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ActivateByUserID", ctx, tx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ActivateByUserID indicates an expected call of ActivateByUserID.
+func (mr *MockTenantMembershipRepositoryMockRecorder) ActivateByUserID(ctx, tx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ActivateByUserID", reflect.TypeOf((*MockTenantMembershipRepository)(nil).ActivateByUserID), ctx, tx, userID)
+}
+
 // Create mocks base method.
 func (m *MockTenantMembershipRepository) Create(ctx context.Context, tx pgx.Tx, membership *model.TenantMembership) error {
 	m.ctrl.T.Helper()

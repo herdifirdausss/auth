@@ -161,7 +161,7 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 		membership := &model.TenantMembership{
 			UserID:   user.ID,
 			TenantID: tenant.ID,
-			Status:   "invited",
+			Status:   "active", // Set to active immediately for MVP/Testing
 		}
 		if err := s.membershipRepo.Create(ctx, tx, membership); err != nil {
 			return nil, err
@@ -236,6 +236,11 @@ func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAd
 
 	// 5. Set verified
 	if err := s.userRepo.SetVerified(ctx, tx, token.UserID); err != nil {
+		return err
+	}
+
+	// 5a. Activate Membership
+	if err := s.membershipRepo.ActivateByUserID(ctx, tx, token.UserID); err != nil {
 		return err
 	}
 
@@ -436,8 +441,8 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		return nil, err
 	}
 
-	// 12. Redis Cache
-	s.sessionCache.Set(ctx, sessionHash, &redis.CachedSession{
+	// 12. Redis Cache (Use Session ID as key)
+	s.sessionCache.Set(ctx, session.ID, &redis.CachedSession{
 		SessionID:     session.ID,
 		UserID:        session.UserID,
 		MFAVerified:   session.MFAVerified,
@@ -768,9 +773,9 @@ func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHa
 		return err
 	}
 
-	// 3. Clear Redis Cache
+	// 3. Clear Redis Cache (Use SessionID as we changed the middleware key)
 	if s.sessionCache != nil {
-		if err := s.sessionCache.Delete(ctx, tokenHash); err != nil {
+		if err := s.sessionCache.Delete(ctx, sessionID); err != nil {
 			// Log error but don't fail logout
 			s.logger.ErrorContext(ctx, "Error deleting session cache", "error", err)
 		}
@@ -797,6 +802,9 @@ func (s *AuthServiceImpl) LogoutAll(ctx context.Context, userID string) error {
 	if err := s.refreshTokenRepo.RevokeAllByUser(ctx, nil, userID); err != nil {
 		return err
 	}
+
+	// 3. TODO: Clear all sessions from Redis (requires scanning or user-specific session sets)
+	// For now, at least they are revoked in DB.
 
 	// 3. Log Security Event
 	s.eventRepo.Create(ctx, &model.SecurityEvent{

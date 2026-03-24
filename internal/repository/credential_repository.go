@@ -25,16 +25,16 @@ func NewPostgresCredentialRepository(db Pool) *PostgresCredentialRepository {
 }
 
 func (r *PostgresCredentialRepository) Create(ctx context.Context, tx pgx.Tx, cred *model.UserCredential) error {
-	query := `INSERT INTO user_credentials (id, user_id, password_hash, password_salt, password_algo) 
-	          VALUES ($1, $2, $3, $4, $5) RETURNING id, created_at, updated_at`
+	query := `INSERT INTO user_credentials (user_id, password_hash, password_salt, password_algo) 
+	          VALUES ($1, $2, $3, $4) RETURNING created_at, updated_at`
 
 	var err error
 	if tx != nil {
-		err = tx.QueryRow(ctx, query, cred.ID, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
-			Scan(&cred.ID, &cred.CreatedAt, &cred.UpdatedAt)
+		err = tx.QueryRow(ctx, query, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
+			Scan(&cred.CreatedAt, &cred.UpdatedAt)
 	} else {
-		err = r.db.QueryRow(ctx, query, cred.ID, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
-			Scan(&cred.ID, &cred.CreatedAt, &cred.UpdatedAt)
+		err = r.db.QueryRow(ctx, query, cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
+			Scan(&cred.CreatedAt, &cred.UpdatedAt)
 	}
 
 	if err != nil {
@@ -44,12 +44,12 @@ func (r *PostgresCredentialRepository) Create(ctx context.Context, tx pgx.Tx, cr
 }
 
 func (r *PostgresCredentialRepository) FindByUserID(ctx context.Context, userID string) (*model.UserCredential, error) {
-	query := `SELECT id, user_id, password_hash, password_salt, password_algo, must_change_password, last_changed_at, created_at, updated_at 
+	query := `SELECT user_id, password_hash, password_salt, password_algo, must_change_password, last_changed_at, created_at, updated_at 
 	          FROM user_credentials WHERE user_id = $1`
 
 	var cred model.UserCredential
 	err := r.db.QueryRow(ctx, query, userID).Scan(
-		&cred.ID, &cred.UserID, &cred.PasswordHash, &cred.PasswordSalt, &cred.PasswordAlgo,
+		&cred.UserID, &cred.PasswordHash, &cred.PasswordSalt, &cred.PasswordAlgo,
 		&cred.MustChangePassword, &cred.LastChangedAt, &cred.CreatedAt, &cred.UpdatedAt,
 	)
 	if err != nil {
@@ -165,4 +165,3 @@ func (r *PostgresSecurityEventRepository) Create(ctx context.Context, event *mod
 	}
 	return nil
 }
-

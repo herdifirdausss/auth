@@ -42,6 +42,7 @@ type TenantMembershipRepository interface {
 	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)
 	FindPermissionsByUserAndTenant(ctx context.Context, userID, tenantID string) ([]string, error)
 	FindRolesByMembership(ctx context.Context, membershipID string) ([]model.Role, error)
+	ActivateByUserID(ctx context.Context, tx pgx.Tx, userID string) error
 }
 
 type PostgresTenantMembershipRepository struct {
@@ -146,4 +147,16 @@ func (r *PostgresTenantMembershipRepository) FindRolesByMembership(ctx context.C
 	}
 	return roles, nil
 }
-
+func (r *PostgresTenantMembershipRepository) ActivateByUserID(ctx context.Context, tx pgx.Tx, userID string) error {
+	query := `UPDATE tenant_memberships SET status = 'active', updated_at = now() WHERE user_id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.Exec(ctx, query, userID)
+	} else {
+		_, err = r.db.Exec(ctx, query, userID)
+	}
+	if err != nil {
+		return fmt.Errorf("error activating membership: %w", err)
+	}
+	return nil
+}
