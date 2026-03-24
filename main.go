@@ -1,15 +1,20 @@
 package main
 
 import (
-	"fmt"
-	"log"
+	"context"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/herdifirdausss/auth/internal/config"
 	"github.com/herdifirdausss/auth/internal/database"
 	"github.com/herdifirdausss/auth/internal/handler"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
+	"github.com/herdifirdausss/auth/internal/infrastructure/telemetry"
+	"github.com/herdifirdausss/auth/internal/logger"
 	"github.com/herdifirdausss/auth/internal/middleware"
 	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/router"
@@ -18,32 +23,56 @@ import (
 )
 
 func main() {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		env = "development"
+	}
+
+	// 1. Initialize Logger
+	l := logger.NewLogger(env)
+	slog.SetDefault(l)
+
+	// 2. Initialize Telemetry & Graceful Shutdown Context
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	otelCfg := telemetry.Config{
+		ServiceName:    "auth-service",
+		ServiceVersion: "1.0.0",
+		Environment:    env,
+	}
+	tel, err := telemetry.Setup(ctx, otelCfg)
+	if err != nil {
+		slog.Error("Failed to setup telemetry", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := tel.Shutdown(shutdownCtx); err != nil {
+			slog.Error("Failed to shutdown telemetry", "error", err)
+		}
+	}()
+
+	// 3. Database connection
 	db, err := database.NewDB()
 	if err != nil {
-		log.Fatalf("Error connecting to database: %v", err)
+		slog.Error("Error connecting to database", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
-	// migrationPath := database.GetMigrationPath()
-	// fmt.Printf("Running migration from %s...\n", migrationPath)
-	// if err := database.RunMigration(db, migrationPath); err != nil {
-	// 	log.Fatalf("Error running migration: %v", err)
-	// }
-
-	// fmt.Println("Verifying migration...")
-	// if err := database.VerifyMigration(db); err != nil {
-	// 	log.Fatalf("Migration verification failed: %v", err)
-	// }
-
+	// 4. Redis connection
 	redisClient, err := redis.NewRedisClient(config.RedisConfig{
 		Host: "localhost",
 		Port: "6379",
 	})
 	if err != nil {
-		log.Fatalf("Error connecting to redis: %v", err)
+		slog.Error("Error connecting to redis", "error", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Migration successful and verified!")
+	slog.Info("Infrastructure initialized successfully", "env", env)
 
 	jwtConfig := security.JWTConfig{
 		SecretKey:    []byte("randomjwtsecret"),
@@ -69,9 +98,39 @@ func main() {
 	mfaHandler := handler.NewMFAHandler(mfaService)
 
 	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware)
+
+	// Wrap Router with Global Middlewares
+	var h http.Handler = r
+	h = middleware.RequestID(h)
+	h = middleware.SecurityHeaders(h)
+	h = middleware.CORS(middleware.CORSConfig{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders: []string{"Content-Type", "Authorization", "X-Request-ID"},
+	})(h)
+
 	addr := ":8080"
-	fmt.Printf("Starting server at %s...\n", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("Server failed: %v", err)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: h,
 	}
+
+	go func() {
+		slog.Info("Starting server", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("Server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+	slog.Info("Shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("Server forced to shutdown", "error", err)
+	}
+
+	slog.Info("Server exited gracefully")
 }
