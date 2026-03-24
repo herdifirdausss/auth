@@ -7,16 +7,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/herdifirdausss/auth/internal/service"
 	"go.uber.org/mock/gomock"
 )
 
 func TestAuthHandler_ForgotPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockService := service.NewMockAuthService(ctrl)
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	t.Run("Success", func(t *testing.T) {
@@ -38,7 +38,7 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 func TestAuthHandler_ResetPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
-	mockService := service.NewMockAuthService(ctrl)
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	t.Run("Success", func(t *testing.T) {

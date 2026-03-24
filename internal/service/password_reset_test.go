@@ -3,12 +3,12 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"testing"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -18,16 +18,17 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	userRepo := repository.NewMockUserRepository(ctrl)
-	tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
-	rateLimiter := redis.NewMockRateLimiter(ctrl)
+	userRepo := mocks.NewMockUserRepository(ctrl)
+	tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 
 	s := &AuthServiceImpl{
 		userRepo:    userRepo,
 		tokenRepo:   tokenRepo,
 		eventRepo:   eventRepo,
 		rateLimiter: rateLimiter,
+		logger:      slog.Default(),
 	}
 
 	email := "test@example.com"
@@ -77,24 +78,25 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		db, sqlMock, _ := sqlmock.New()
-		defer db.Close()
+		mockDB := mocks.NewMockTransactor(ctrl)
+		mockTx := mocks.NewMockTx(ctrl)
 
-		tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-		credRepo := repository.NewMockCredentialRepository(ctrl)
-		historyRepo := repository.NewMockPasswordHistoryRepository(ctrl)
-		sessionRepo := repository.NewMockSessionRepository(ctrl)
-		eventRepo := repository.NewMockSecurityEventRepository(ctrl)
-		hasher := security.NewMockPasswordHasher(ctrl)
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		credRepo := mocks.NewMockCredentialRepository(ctrl)
+		historyRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
+		sessionRepo := mocks.NewMockSessionRepository(ctrl)
+		eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
+		hasher := mocks.NewMockPasswordHasher(ctrl)
 
 		s := &AuthServiceImpl{
-			db:                  db,
+			db:                  mockDB,
 			tokenRepo:           tokenRepo,
 			credRepo:            credRepo,
 			passwordHistoryRepo: historyRepo,
 			sessionRepo:         sessionRepo,
 			eventRepo:           eventRepo,
 			hasher:              hasher,
+			logger:              slog.Default(),
 		}
 
 		token := &model.SecurityToken{
@@ -107,36 +109,33 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		hasher.EXPECT().Verify(newPassword, "old-hash-1", "").Return(false, nil)
 		hasher.EXPECT().Hash(newPassword).Return("new-hash", "new-salt", nil)
 
-		sqlMock.ExpectBegin()
-		credRepo.EXPECT().UpdatePassword(gomock.Any(), gomock.Any(), "user-1", "new-hash", "new-salt").Return(nil)
-		historyRepo.EXPECT().Create(gomock.Any(), gomock.Any(), "user-1", "new-hash").Return(nil)
+		mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
+		credRepo.EXPECT().UpdatePassword(gomock.Any(), mockTx, "user-1", "new-hash", "new-salt").Return(nil)
+		historyRepo.EXPECT().Create(gomock.Any(), mockTx, "user-1", "new-hash").Return(nil)
 		historyRepo.EXPECT().Cleanup(gomock.Any(), "user-1", 5).Return(nil)
-		tokenRepo.EXPECT().MarkUsed(gomock.Any(), gomock.Any(), "token-1").Return(nil)
-		sessionRepo.EXPECT().RevokeAllByUser(gomock.Any(), gomock.Any(), "user-1", "password_reset").Return(nil)
-		sqlMock.ExpectCommit()
+		tokenRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "token-1").Return(nil)
+		sessionRepo.EXPECT().RevokeAllByUser(gomock.Any(), mockTx, "user-1", "password_reset").Return(nil)
+		mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
+		mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 		eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 
 		err := s.ResetPassword(context.Background(), rawToken, newPassword, "127.0.0.1", "ua")
 		assert.NoError(t, err)
-		assert.NoError(t, sqlMock.ExpectationsWereMet())
 	})
 
 	t.Run("RecentlyUsedPassword", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		db, _, _ := sqlmock.New()
-		defer db.Close()
-
-		tokenRepo := repository.NewMockSecurityTokenRepository(ctrl)
-		historyRepo := repository.NewMockPasswordHistoryRepository(ctrl)
-		hasher := security.NewMockPasswordHasher(ctrl)
+		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
+		historyRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
+		hasher := mocks.NewMockPasswordHasher(ctrl)
 
 		s := &AuthServiceImpl{
-			db:                  db,
 			tokenRepo:           tokenRepo,
 			passwordHistoryRepo: historyRepo,
 			hasher:              hasher,
+			logger:              slog.Default(),
 		}
 
 		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
@@ -149,3 +148,4 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		assert.Contains(t, err.Error(), "recently used")
 	})
 }
+

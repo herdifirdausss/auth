@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/herdifirdausss/auth/internal/service"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -15,7 +15,7 @@ func TestRequirePermission_Allowed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockPermService := service.NewMockPermissionService(ctrl)
+	mockPermService := mocks.NewMockPermissionService(ctrl)
 	middleware := RequirePermission(mockPermService, "users:read")
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -38,7 +38,7 @@ func TestRequirePermission_Denied_403(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockPermService := service.NewMockPermissionService(ctrl)
+	mockPermService := mocks.NewMockPermissionService(ctrl)
 	middleware := RequirePermission(mockPermService, "users:write")
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -61,7 +61,7 @@ func TestRequirePermission_NoAuthContext_401(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockPermService := service.NewMockPermissionService(ctrl)
+	mockPermService := mocks.NewMockPermissionService(ctrl)
 	middleware := RequirePermission(mockPermService, "users:read")
 
 	req := httptest.NewRequest("GET", "/", nil)
@@ -80,7 +80,7 @@ func TestRequirePermission_ServiceError_500(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockPermService := service.NewMockPermissionService(ctrl)
+	mockPermService := mocks.NewMockPermissionService(ctrl)
 	middleware := RequirePermission(mockPermService, "users:read")
 
 	req := httptest.NewRequest("GET", "/", nil)

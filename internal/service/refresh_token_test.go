@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -17,15 +17,15 @@ func TestRefreshToken_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	db, sqlMock, _ := sqlmock.New()
-	defer db.Close()
+	mockDB := mocks.NewMockTransactor(ctrl)
+	mockTx := mocks.NewMockTx(ctrl)
 
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 	
 	s := &AuthServiceImpl{
-		db: db,
+		db: mockDB,
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
 		eventRepo: eventRepo,
@@ -33,6 +33,7 @@ func TestRefreshToken_Success(t *testing.T) {
 			SecretKey: []byte("test"),
 			AccessExpiry: 15 * time.Minute,
 		},
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "old-refresh-token"
@@ -49,11 +50,13 @@ func TestRefreshToken_Success(t *testing.T) {
 
 	rfRepo.EXPECT().FindByTokenHash(gomock.Any(), refreshHash).Return(token, nil)
 	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1"}, nil)
-	sqlMock.ExpectBegin()
-	rfRepo.EXPECT().MarkUsed(gomock.Any(), gomock.Any(), "rt-1").Return(nil)
-	rfRepo.EXPECT().Create(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	
+	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
+	rfRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "rt-1").Return(nil)
+	rfRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
 	sessRepo.EXPECT().UpdateActivity(gomock.Any(), "sess-1").Return(nil)
-	sqlMock.ExpectCommit()
+	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
+	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
 	res, err := s.RefreshToken(context.Background(), rawRefresh, "1.1.1.1", "ua")
 	
@@ -66,18 +69,19 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	db, sqlMock, _ := sqlmock.New()
-	defer db.Close()
+	mockDB := mocks.NewMockTransactor(ctrl)
+	mockTx := mocks.NewMockTx(ctrl)
 
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 	
 	s := &AuthServiceImpl{
-		db: db,
+		db: mockDB,
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
 		eventRepo: eventRepo,
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "reused-token"
@@ -95,13 +99,16 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 
 	rfRepo.EXPECT().FindByTokenHash(gomock.Any(), refreshHash).Return(token, nil)
 	eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
-	sqlMock.ExpectBegin()
-	rfRepo.EXPECT().RevokeByFamily(gomock.Any(), gomock.Any(), "fam-1").Return(nil)
+	
+	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
+	rfRepo.EXPECT().RevokeByFamily(gomock.Any(), mockTx, "fam-1").Return(nil)
 	sessRepo.EXPECT().RevokeByID(gomock.Any(), "sess-1", "refresh_token_reuse", "system").Return(nil)
-	sqlMock.ExpectCommit()
+	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
+	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
 	_, err := s.RefreshToken(context.Background(), rawRefresh, "1.1.1.1", "ua")
 	
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "suspicious activity")
 }
+

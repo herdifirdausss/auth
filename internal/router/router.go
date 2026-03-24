@@ -4,10 +4,15 @@ import (
 	"net/http"
 	"github.com/herdifirdausss/auth/internal/handler"
 	"github.com/herdifirdausss/auth/internal/middleware"
+	"github.com/herdifirdausss/auth/internal/infrastructure/metrics"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
-func NewRouter(authHandler *handler.AuthHandler, userHandler *handler.UserHandler, mfaHandler *handler.MFAHandler, authMiddleware *middleware.AuthMiddleware) *http.ServeMux {
+func NewRouter(authHandler *handler.AuthHandler, userHandler *handler.UserHandler, mfaHandler *handler.MFAHandler, authMiddleware *middleware.AuthMiddleware, reg *prometheus.Registry) *http.ServeMux {
 	mux := http.NewServeMux()
+
+	// Metrics
+	mux.Handle("/metrics", metrics.Handler(reg))
 
 	// Public Routes
 	mux.HandleFunc("/auth/register", authHandler.Register)
