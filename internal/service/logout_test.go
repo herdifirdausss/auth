@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/herdifirdausss/auth/internal/mocks"
@@ -23,6 +24,7 @@ func TestAuthService_Logout(t *testing.T) {
 		refreshTokenRepo: rfRepo,
 		eventRepo:        eventRepo,
 		sessionCache:     sessionCache,
+		logger:           slog.Default(),
 	}
 
 	userID := "user-1"
@@ -52,6 +54,7 @@ func TestAuthService_LogoutAll(t *testing.T) {
 		sessionRepo:      sessRepo,
 		refreshTokenRepo: rfRepo,
 		eventRepo:        eventRepo,
+		logger:           slog.Default(),
 	}
 
 	userID := "user-1"

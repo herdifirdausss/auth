@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ func TestRefreshToken_Success(t *testing.T) {
 			SecretKey: []byte("test"),
 			AccessExpiry: 15 * time.Minute,
 		},
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "old-refresh-token"
@@ -79,6 +81,7 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
 		eventRepo: eventRepo,
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "reused-token"

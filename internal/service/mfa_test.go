@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -30,7 +31,7 @@ func TestMFAService_SetupTOTP(t *testing.T) {
 		Issuer:    "test",
 	}
 
-	svc := NewMFAService(nil, mfaRepo, nil, nil, nil, jwtConfig, rateLimiter)
+	svc := NewMFAService(nil, mfaRepo, nil, nil, nil, jwtConfig, rateLimiter, slog.Default())
 
 	mfaRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 
@@ -55,7 +56,7 @@ func TestMFAService_VerifySetup(t *testing.T) {
 		Issuer:    "test",
 	}
 
-	svc := NewMFAService(nil, mfaRepo, nil, nil, nil, jwtConfig, rateLimiter)
+	svc := NewMFAService(nil, mfaRepo, nil, nil, nil, jwtConfig, rateLimiter, slog.Default())
 
 	encryptionKey := "MTIzNDU2Nzg5MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTI="
 	secret := "JBSWY3DPEHPK3PXP" // base32
@@ -102,7 +103,7 @@ func TestMFAService_Challenge(t *testing.T) {
 		AccessExpiry: 15 * time.Minute,
 	}
 
-	svc := NewMFAService(mockDB, mfaRepo, nil, sessRepo, rfRepo, jwtConfig, rateLimiter)
+	svc := NewMFAService(mockDB, mfaRepo, nil, sessRepo, rfRepo, jwtConfig, rateLimiter, slog.Default())
 
 	userID := "user-1"
 	mfaToken, _ := security.GenerateMFAToken(jwtConfig, userID, 5*time.Minute)
