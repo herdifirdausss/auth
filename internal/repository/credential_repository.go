@@ -7,7 +7,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -18,10 +17,10 @@ type CredentialRepository interface {
 }
 
 type PostgresCredentialRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresCredentialRepository(db *pgxpool.Pool) *PostgresCredentialRepository {
+func NewPostgresCredentialRepository(db Pool) *PostgresCredentialRepository {
 	return &PostgresCredentialRepository{db: db}
 }
 
@@ -88,10 +87,10 @@ type SecurityTokenRepository interface {
 }
 
 type PostgresSecurityTokenRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresSecurityTokenRepository(db *pgxpool.Pool) *PostgresSecurityTokenRepository {
+func NewPostgresSecurityTokenRepository(db Pool) *PostgresSecurityTokenRepository {
 	return &PostgresSecurityTokenRepository{db: db}
 }
 
@@ -147,10 +146,10 @@ type SecurityEventRepository interface {
 }
 
 type PostgresSecurityEventRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresSecurityEventRepository(db *pgxpool.Pool) *PostgresSecurityEventRepository {
+func NewPostgresSecurityEventRepository(db Pool) *PostgresSecurityEventRepository {
 	return &PostgresSecurityEventRepository{db: db}
 }
 

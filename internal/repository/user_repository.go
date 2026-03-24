@@ -7,7 +7,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -23,10 +22,10 @@ type UserRepository interface {
 }
 
 type PostgresUserRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresUserRepository(db *pgxpool.Pool) *PostgresUserRepository {
+func NewPostgresUserRepository(db Pool) *PostgresUserRepository {
 	return &PostgresUserRepository{db: db}
 }
 

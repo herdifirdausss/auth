@@ -8,7 +8,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -17,10 +16,10 @@ type TenantRepository interface {
 }
 
 type PostgresTenantRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresTenantRepository(db *pgxpool.Pool) *PostgresTenantRepository {
+func NewPostgresTenantRepository(db Pool) *PostgresTenantRepository {
 	return &PostgresTenantRepository{db: db}
 }
 
@@ -46,10 +45,10 @@ type TenantMembershipRepository interface {
 }
 
 type PostgresTenantMembershipRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresTenantMembershipRepository(db *pgxpool.Pool) *PostgresTenantMembershipRepository {
+func NewPostgresTenantMembershipRepository(db Pool) *PostgresTenantMembershipRepository {
 	return &PostgresTenantMembershipRepository{db: db}
 }
 

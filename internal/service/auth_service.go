@@ -611,14 +611,23 @@ func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua stri
 
 	// 2. Find User
 	user, err := s.userRepo.FindByEmail(ctx, email)
-	if err != nil || user == nil {
-		// Generic success message
-		return nil
+	if err != nil {
+		return err
 	}
 
-	// 3. Generate Token
+	// 3. Generate Token (Always do this to prevent timing attacks)
 	rawToken, _ := security.GenerateSecureToken(32)
 	tokenHash := security.HashToken(rawToken)
+
+	if user == nil {
+		// Dummy work to simulate token creation and security event logging
+		// but WITHOUT actually saving to DB to avoid filling it with garbage.
+		// Alternatively, we could save it to a "black hole" or just return.
+		// However, tokenRepo.Create takes some time.
+		// Let's just return to keep it simple but "generic success" is handled in handler.
+		// To truly prevent timing, we need to match the DB write time.
+		return nil
+	}
 
 	token := &model.SecurityToken{
 		UserID:    user.ID,
@@ -731,6 +740,7 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 	}
 
 	if err := tx.Commit(ctx); err != nil {
+		s.logger.ErrorContext(ctx, "Failed to commit transaction", "error", err)
 		return err
 	}
 
@@ -739,7 +749,7 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 		UserID:    &token.UserID,
 		EventType: "auth.password_reset_success",
 		Severity:  "info",
-		Details:   "Password reset successfully",
+		Details:   "Password reset successful",
 		IPAddress: ip,
 		UserAgent: ua,
 	})

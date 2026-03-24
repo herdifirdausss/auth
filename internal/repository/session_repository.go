@@ -7,7 +7,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -22,10 +21,10 @@ type SessionRepository interface {
 }
 
 type PostgresSessionRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresSessionRepository(db *pgxpool.Pool) *PostgresSessionRepository {
+func NewPostgresSessionRepository(db Pool) *PostgresSessionRepository {
 	return &PostgresSessionRepository{db: db}
 }
 
@@ -136,10 +135,10 @@ type RefreshTokenRepository interface {
 }
 
 type PostgresRefreshTokenRepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresRefreshTokenRepository(db *pgxpool.Pool) *PostgresRefreshTokenRepository {
+func NewPostgresRefreshTokenRepository(db Pool) *PostgresRefreshTokenRepository {
 	return &PostgresRefreshTokenRepository{db: db}
 }
 

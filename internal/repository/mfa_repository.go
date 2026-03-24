@@ -7,7 +7,6 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
@@ -20,10 +19,10 @@ type MFARepository interface {
 }
 
 type PostgresMFARepository struct {
-	db *pgxpool.Pool
+	db Pool
 }
 
-func NewPostgresMFARepository(db *pgxpool.Pool) *PostgresMFARepository {
+func NewPostgresMFARepository(db Pool) *PostgresMFARepository {
 	return &PostgresMFARepository{db: db}
 }
 
