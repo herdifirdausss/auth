@@ -47,7 +47,7 @@ func NewPostgresPool(ctx context.Context, dsn string, logger *slog.Logger) (*pgx
 	}
 
 	stat := pool.Stat()
-	logger.Info("Postgres pool initialized",
+	logger.InfoContext(ctx, "Postgres pool initialized",
 		"host", config.ConnConfig.Host,
 		"max_conns", config.MaxConns,
 		"min_conns", config.MinConns,

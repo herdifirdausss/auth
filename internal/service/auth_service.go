@@ -196,7 +196,7 @@ func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterReque
 	s.eventRepo.Create(ctx, event)
 
 	// TODO: Send email
-	s.logger.Info("Verification token generated", "email", req.Email, "token", tokenStr)
+	s.logger.InfoContext(ctx, "Verification token generated", "email", req.Email, "token", tokenStr)
 
 	return &model.RegisterResponse{
 		Status:  "success",
@@ -615,7 +615,7 @@ func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua stri
 	}
 
 	// 4. TODO: Send Email
-	s.logger.Info("Password reset token generated", "email", email, "token", rawToken)
+	s.logger.InfoContext(ctx, "Password reset token generated", "email", email, "token", rawToken)
 
 	// 5. Security Event
 	s.eventRepo.Create(ctx, &model.SecurityEvent{
@@ -744,7 +744,7 @@ func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHa
 	if s.sessionCache != nil {
 		if err := s.sessionCache.Delete(ctx, tokenHash); err != nil {
 			// Log error but don't fail logout
-			s.logger.Error("Error deleting session cache", "error", err)
+			s.logger.ErrorContext(ctx, "Error deleting session cache", "error", err)
 		}
 	}
 

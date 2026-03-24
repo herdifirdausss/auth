@@ -139,6 +139,7 @@ func main() {
 	// Wrap Router with Global Middlewares
 	var h http.Handler = r
 	h = middleware.RequestID(h)
+	h = middleware.RequestLogger(h)
 	h = middleware.SecurityHeaders(h)
 	h = middleware.CORS(middleware.CORSConfig{
 		AllowedOrigins: []string{"*"},
