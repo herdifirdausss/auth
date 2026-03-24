@@ -250,7 +250,7 @@ CREATE UNIQUE INDEX sessions_token_hash_uidx ON sessions (token_hash)
 -- Covering index: validate token without touching heap
 CREATE INDEX sessions_token_active_covering_idx ON sessions (token_hash)
   INCLUDE (id, user_id, tenant_id, mfa_verified, expires_at, idle_timeout_at)
-  WHERE revoked_at IS NULL AND expires_at > now();
+  WHERE revoked_at IS NULL;
 
 -- User's active session list (session management UI)
 CREATE INDEX sessions_user_active_idx ON sessions (user_id, created_at DESC)
