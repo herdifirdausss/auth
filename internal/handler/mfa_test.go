@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,7 @@ func TestMFAHandler_Setup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mfaSvc := mocks.NewMockMFAService(ctrl)
-	h := NewMFAHandler(mfaSvc)
+	h := NewMFAHandler(mfaSvc, slog.Default())
 
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/auth/mfa/setup", nil)
@@ -37,7 +38,7 @@ func TestMFAHandler_VerifySetup(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mfaSvc := mocks.NewMockMFAService(ctrl)
-	h := NewMFAHandler(mfaSvc)
+	h := NewMFAHandler(mfaSvc, slog.Default())
 
 	reqBody, _ := json.Marshal(model.VerifySetupRequest{OTPCode: "123456"})
 	w := httptest.NewRecorder()
@@ -57,13 +58,13 @@ func TestMFAHandler_Challenge(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mfaSvc := mocks.NewMockMFAService(ctrl)
-	h := NewMFAHandler(mfaSvc)
+	h := NewMFAHandler(mfaSvc, slog.Default())
 
 	reqBody, _ := json.Marshal(model.ChallengeRequest{MFAToken: "mfa-token", OTPCode: "123456"})
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest("POST", "/auth/mfa/challenge", bytes.NewBuffer(reqBody))
 
-	mfaSvc.EXPECT().Challenge(gomock.Any(), "mfa-token", "123456", gomock.Any(), gomock.Any(), "").Return(&model.LoginResponse{AccessToken: "access", RefreshToken: "refresh"}, nil)
+	mfaSvc.EXPECT().Challenge(gomock.Any(), model.ChallengeRequest{MFAToken: "mfa-token", OTPCode: "123456"}, gomock.Any(), gomock.Any(), "").Return(&model.LoginResponse{AccessToken: "access", RefreshToken: "refresh"}, nil)
 
 	h.Challenge(w, r)
 

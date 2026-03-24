@@ -160,8 +160,9 @@ type VerifySetupResponse struct {
 }
 
 type ChallengeRequest struct {
-	MFAToken string `json:"mfa_token" validate:"required"`
-	OTPCode  string `json:"otp_code" validate:"required"`
+	MFAToken     string `json:"mfa_token" validate:"required"`
+	OTPCode      string `json:"otp_code"`
+	RecoveryCode string `json:"recovery_code"`
 }
 
 type ForgotPasswordRequest struct {
@@ -177,6 +178,7 @@ type UserPasswordHistory struct {
 	ID           string    `json:"id"`
 	UserID       string    `json:"user_id"`
 	PasswordHash string    `json:"password_hash"`
+	PasswordSalt string    `json:"password_salt"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 

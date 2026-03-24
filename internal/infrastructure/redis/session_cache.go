@@ -13,7 +13,8 @@ import (
 type SessionCache interface {
 	Set(ctx context.Context, tokenHash string, session *CachedSession) error
 	Get(ctx context.Context, tokenHash string) (*CachedSession, error)
-	Delete(ctx context.Context, tokenHash string) error
+	Delete(ctx context.Context, userID, tokenHash string) error
+	DeleteByUserID(ctx context.Context, userID string) error
 }
 
 type RedisSessionCache struct {
@@ -43,8 +44,18 @@ func (s *RedisSessionCache) Set(ctx context.Context, tokenHash string, session *
 		return fmt.Errorf("error marshaling session: %w", err)
 	}
 
-	key := fmt.Sprintf("session:cache:%s", tokenHash)
-	return s.client.Set(ctx, key, data, s.ttl).Err()
+	pipe := s.client.Pipeline()
+	
+	sessionKey := fmt.Sprintf("session:cache:%s", tokenHash)
+	pipe.Set(ctx, sessionKey, data, s.ttl)
+	
+	userKey := fmt.Sprintf("user:sessions:%s", session.UserID)
+	pipe.SAdd(ctx, userKey, tokenHash)
+	// Refresh user key TTL to match session TTL (approximate)
+	pipe.Expire(ctx, userKey, 30*24*time.Hour) 
+
+	_, err = pipe.Exec(ctx)
+	return err
 }
 
 func (s *RedisSessionCache) Get(ctx context.Context, tokenHash string) (*CachedSession, error) {
@@ -62,7 +73,38 @@ func (s *RedisSessionCache) Get(ctx context.Context, tokenHash string) (*CachedS
 	return &session, nil
 }
 
-func (s *RedisSessionCache) Delete(ctx context.Context, tokenHash string) error {
-	key := fmt.Sprintf("session:cache:%s", tokenHash)
-	return s.client.Del(ctx, key).Err()
+func (s *RedisSessionCache) Delete(ctx context.Context, userID, tokenHash string) error {
+	pipe := s.client.Pipeline()
+	
+	sessionKey := fmt.Sprintf("session:cache:%s", tokenHash)
+	pipe.Del(ctx, sessionKey)
+	
+	userKey := fmt.Sprintf("user:sessions:%s", userID)
+	pipe.SRem(ctx, userKey, tokenHash)
+	
+	_, err := pipe.Exec(ctx)
+	return err
+}
+
+func (s *RedisSessionCache) DeleteByUserID(ctx context.Context, userID string) error {
+	userKey := fmt.Sprintf("user:sessions:%s", userID)
+	
+	// Get all cached tokens for this user
+	tokenHashes, err := s.client.SMembers(ctx, userKey).Result()
+	if err != nil {
+		return fmt.Errorf("error getting user sessions from redis: %w", err)
+	}
+	
+	if len(tokenHashes) == 0 {
+		return nil
+	}
+
+	pipe := s.client.Pipeline()
+	for _, hash := range tokenHashes {
+		pipe.Del(ctx, fmt.Sprintf("session:cache:%s", hash))
+	}
+	pipe.Del(ctx, userKey)
+	
+	_, err = pipe.Exec(ctx)
+	return err
 }

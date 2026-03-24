@@ -83,7 +83,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		// 7. Validate Idle Timeout
 		if session.IdleTimeoutAt.Before(time.Now()) {
 			m.sessionRepo.RevokeByID(r.Context(), session.SessionID, "idle_timeout", "system")
-			m.sessionCache.Delete(r.Context(), session.SessionID)
+			m.sessionCache.Delete(r.Context(), session.UserID, session.SessionID)
 			writeUnauthorized(w, "Session timed out due to inactivity")
 			return
 		}

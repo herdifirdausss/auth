@@ -3,14 +3,14 @@ package repository
 import (
 	"context"
 	"fmt"
-
+	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/jackc/pgx/v5"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type PasswordHistoryRepository interface {
-	GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error)
-	Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error
+	GetRecentPasswords(ctx context.Context, userID string, limit int) ([]*model.UserPasswordHistory, error)
+	Create(ctx context.Context, tx pgx.Tx, userID, passwordHash, passwordSalt string) error
 	Cleanup(ctx context.Context, userID string, keepCount int) error
 }
 
@@ -22,8 +22,8 @@ func NewPostgresPasswordHistoryRepository(db Pool) *PostgresPasswordHistoryRepos
 	return &PostgresPasswordHistoryRepository{db: db}
 }
 
-func (r *PostgresPasswordHistoryRepository) GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error) {
-	query := `SELECT password_hash FROM user_password_history 
+func (r *PostgresPasswordHistoryRepository) GetRecentPasswords(ctx context.Context, userID string, limit int) ([]*model.UserPasswordHistory, error) {
+	query := `SELECT password_hash, password_salt FROM password_history 
 	          WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2`
 	
 	rows, err := r.db.Query(ctx, query, userID, limit)
@@ -32,25 +32,25 @@ func (r *PostgresPasswordHistoryRepository) GetRecentPasswords(ctx context.Conte
 	}
 	defer rows.Close()
 	
-	var hashes []string
+	var history []*model.UserPasswordHistory
 	for rows.Next() {
-		var hash string
-		if err := rows.Scan(&hash); err != nil {
-			return nil, fmt.Errorf("error scanning password hash: %w", err)
+		var h model.UserPasswordHistory
+		if err := rows.Scan(&h.PasswordHash, &h.PasswordSalt); err != nil {
+			return nil, fmt.Errorf("error scanning password history: %w", err)
 		}
-		hashes = append(hashes, hash)
+		history = append(history, &h)
 	}
-	return hashes, nil
+	return history, nil
 }
 
-func (r *PostgresPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error {
-	query := `INSERT INTO user_password_history (user_id, password_hash) VALUES ($1, $2)`
+func (r *PostgresPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash, passwordSalt string) error {
+	query := `INSERT INTO password_history (user_id, password_hash, password_salt) VALUES ($1, $2, $3)`
 	
 	var err error
 	if tx != nil {
-		_, err = tx.Exec(ctx, query, userID, passwordHash)
+		_, err = tx.Exec(ctx, query, userID, passwordHash, passwordSalt)
 	} else {
-		_, err = r.db.Exec(ctx, query, userID, passwordHash)
+		_, err = r.db.Exec(ctx, query, userID, passwordHash, passwordSalt)
 	}
 	
 	if err != nil {
@@ -60,9 +60,9 @@ func (r *PostgresPasswordHistoryRepository) Create(ctx context.Context, tx pgx.T
 }
 
 func (r *PostgresPasswordHistoryRepository) Cleanup(ctx context.Context, userID string, keepCount int) error {
-	query := `DELETE FROM user_password_history 
+	query := `DELETE FROM password_history 
 	          WHERE id IN (
-	              SELECT id FROM user_password_history 
+	              SELECT id FROM password_history 
 	              WHERE user_id = $1 
 	              ORDER BY created_at DESC 
 	              OFFSET $2

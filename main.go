@@ -22,6 +22,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/router"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/herdifirdausss/auth/internal/service"
+	"github.com/herdifirdausss/auth/internal/utils"
 )
 
 func main() {
@@ -74,8 +75,13 @@ func main() {
 	l.Info("Infrastructure initialized successfully", "env", env)
 
 	// 7. Domain Configuration
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "this-is-a-very-secret-jwt-key-32-chars-long"
+	}
+
 	jwtConfig := security.JWTConfig{
-		SecretKey:    []byte("randomjwtsecret"),
+		SecretKey:    []byte(jwtSecret),
 		AccessExpiry: 15 * time.Minute,
 		Issuer:       "auth-service",
 	}
@@ -118,8 +124,11 @@ func main() {
 		userRepo,
 		sessionRepo,
 		refreshTokenRepo,
+		tenantMembershipRepo,
 		jwtConfig,
 		redis.NewRateLimiter(redisClient),
+		redis.NewSessionCache(redisClient, time.Hour),
+		utils.RealClock{},
 		l,
 	)
 
@@ -128,10 +137,10 @@ func main() {
 	go cleanupManager.Start(ctx)
 
 	// 11. Handlers
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, l)
 	authMiddleware := middleware.NewAuthMiddleware(jwtConfig, sessionRepo, redis.NewSessionCache(redisClient, time.Hour), tenantMembershipRepo)
 	userHandler := handler.NewUserHandler()
-	mfaHandler := handler.NewMFAHandler(mfaService)
+	mfaHandler := handler.NewMFAHandler(mfaService, l)
 
 	// 12. Router & HTTP Server
 	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware, reg)

@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	model "github.com/herdifirdausss/auth/internal/model"
 	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -56,24 +57,24 @@ func (mr *MockPasswordHistoryRepositoryMockRecorder) Cleanup(ctx, userID, keepCo
 }
 
 // Create mocks base method.
-func (m *MockPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash string) error {
+func (m *MockPasswordHistoryRepository) Create(ctx context.Context, tx pgx.Tx, userID, passwordHash, passwordSalt string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Create", ctx, tx, userID, passwordHash)
+	ret := m.ctrl.Call(m, "Create", ctx, tx, userID, passwordHash, passwordSalt)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Create indicates an expected call of Create.
-func (mr *MockPasswordHistoryRepositoryMockRecorder) Create(ctx, tx, userID, passwordHash any) *gomock.Call {
+func (mr *MockPasswordHistoryRepositoryMockRecorder) Create(ctx, tx, userID, passwordHash, passwordSalt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockPasswordHistoryRepository)(nil).Create), ctx, tx, userID, passwordHash)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockPasswordHistoryRepository)(nil).Create), ctx, tx, userID, passwordHash, passwordSalt)
 }
 
 // GetRecentPasswords mocks base method.
-func (m *MockPasswordHistoryRepository) GetRecentPasswords(ctx context.Context, userID string, limit int) ([]string, error) {
+func (m *MockPasswordHistoryRepository) GetRecentPasswords(ctx context.Context, userID string, limit int) ([]*model.UserPasswordHistory, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRecentPasswords", ctx, userID, limit)
-	ret0, _ := ret[0].([]string)
+	ret0, _ := ret[0].([]*model.UserPasswordHistory)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

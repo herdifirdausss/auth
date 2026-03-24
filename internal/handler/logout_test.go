@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,7 +16,7 @@ func TestLogoutHandler_Logout_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	authCtx := &middleware.AuthContext{
 		SessionID: "sess-1",
@@ -50,7 +51,7 @@ func TestLogoutHandler_LogoutAll_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	authCtx := &middleware.AuthContext{
 		UserID: "user-1",
@@ -72,7 +73,7 @@ func TestLogoutHandler_Unauthorized(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/logout", nil)
 	// No context

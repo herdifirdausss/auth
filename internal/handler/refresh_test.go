@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -18,7 +19,7 @@ func TestRefreshHandler_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	res := &model.LoginResponse{
 		AccessToken:  "new-access",
@@ -60,7 +61,7 @@ func TestRefreshHandler_NoCookie(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
 	w := httptest.NewRecorder()
@@ -74,7 +75,7 @@ func TestRefreshHandler_ReuseDetected(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	mockService := mocks.NewMockAuthService(ctrl)
-	h := NewAuthHandler(mockService)
+	h := NewAuthHandler(mockService, slog.Default())
 
 	mockService.EXPECT().RefreshToken(gomock.Any(), "reused-token", gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("suspicious activity detected"))

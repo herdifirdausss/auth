@@ -108,7 +108,7 @@ func (r *PostgresSecurityTokenRepository) Create(ctx context.Context, token *mod
 }
 
 func (r *PostgresSecurityTokenRepository) FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error) {
-	query := `SELECT id, user_id, token_type, token_hash, expires_at, used_at, ip_address, user_agent, created_at 
+	query := `SELECT id, user_id, token_type, token_hash, expires_at, used_at, ip_address::text, user_agent, created_at 
 	          FROM security_tokens 
 	          WHERE token_hash = $1 AND token_type = $2 AND used_at IS NULL AND expires_at > now()`
 

@@ -33,7 +33,7 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 
 		mock.ExpectQuery(`INSERT INTO user_credentials`).
 			WithArgs(cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "updated_at"}).
 				AddRow(createdAt, updatedAt))
 
 		err := repo.Create(ctx, nil, cred)
@@ -47,7 +47,7 @@ func TestPostgresCredentialRepository_Create(t *testing.T) {
 
 		mock.ExpectQuery(`INSERT INTO user_credentials`).
 			WithArgs(cred.UserID, cred.PasswordHash, cred.PasswordSalt, cred.PasswordAlgo).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at", "updated_at"}).
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "updated_at"}).
 				AddRow(time.Now(), time.Now()))
 
 		err := repo.Create(ctx, tx, cred)
@@ -78,8 +78,8 @@ func TestPostgresCredentialRepository_FindByUserID(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectQuery(`SELECT (.+) FROM user_credentials WHERE user_id = \$1`).
 			WithArgs(userID).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "password_hash", "password_salt", "password_algo", "must_change_password", "last_changed_at", "created_at", "updated_at"}).
-				AddRow("cred-1", userID, "hash", "salt", "argon2id", false, time.Now(), time.Now(), time.Now()))
+			WillReturnRows(pgxmock.NewRows([]string{"user_id", "password_hash", "password_salt", "password_algo", "must_change_password", "last_changed_at", "created_at", "updated_at"}).
+				AddRow(userID, "hash", "salt", "argon2id", false, time.Now(), time.Now(), time.Now()))
 
 		cred, err := repo.FindByUserID(ctx, userID)
 		assert.NoError(t, err)

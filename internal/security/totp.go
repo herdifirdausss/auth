@@ -19,6 +19,11 @@ func GenerateQRCodeURL(secret, email, issuer string) string {
 
 // VerifyTOTP verifies a TOTP code against a secret with a window of 1 (±30s).
 func VerifyTOTP(secret, code string) bool {
+	return VerifyTOTPAtTime(secret, code, time.Now())
+}
+
+// VerifyTOTPAtTime verifies a TOTP code against a secret at a specific time.
+func VerifyTOTPAtTime(secret, code string, t time.Time) bool {
 	totp := gotp.NewDefaultTOTP(secret)
-	return totp.Verify(code, time.Now().Unix())
+	return totp.Verify(code, t.Unix())
 }

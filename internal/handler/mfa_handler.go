@@ -2,8 +2,8 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/herdifirdausss/auth/internal/middleware"
 	"github.com/herdifirdausss/auth/internal/model"
@@ -12,10 +12,14 @@ import (
 
 type MFAHandler struct {
 	mfaService service.MFAService
+	logger      *slog.Logger
 }
 
-func NewMFAHandler(mfaService service.MFAService) *MFAHandler {
-	return &MFAHandler{mfaService: mfaService}
+func NewMFAHandler(mfaService service.MFAService, logger *slog.Logger) *MFAHandler {
+	return &MFAHandler{
+		mfaService: mfaService,
+		logger:      logger,
+	}
 }
 
 func (h *MFAHandler) Setup(w http.ResponseWriter, r *http.Request) {
@@ -27,7 +31,8 @@ func (h *MFAHandler) Setup(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.mfaService.SetupTOTP(r.Context(), authCtx.UserID, authCtx.Email)
 	if err != nil {
-		h.respondError(w, http.StatusInternalServerError, err.Error())
+		h.logger.ErrorContext(r.Context(), "MFA setup failed", "error", err, "userID", authCtx.UserID)
+		h.respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
 
@@ -49,6 +54,7 @@ func (h *MFAHandler) VerifySetup(w http.ResponseWriter, r *http.Request) {
 
 	res, err := h.mfaService.VerifySetup(r.Context(), authCtx.UserID, req.OTPCode)
 	if err != nil {
+		h.logger.WarnContext(r.Context(), "MFA verify setup failed", "error", err, "userID", authCtx.UserID)
 		h.respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -59,15 +65,18 @@ func (h *MFAHandler) VerifySetup(w http.ResponseWriter, r *http.Request) {
 func (h *MFAHandler) Challenge(w http.ResponseWriter, r *http.Request) {
 	var req model.ChallengeRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode MFA challenge request", "error", err)
 		h.respondError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	ip := h.getIPAddress(r)
 	ua := r.UserAgent()
+	fingerprint := r.Header.Get("X-Device-Fingerprint")
 
-	res, err := h.mfaService.Challenge(r.Context(), req.MFAToken, req.OTPCode, ip, ua, "")
+	res, err := h.mfaService.Challenge(r.Context(), req, ip, ua, fingerprint)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "MFA challenge failed", "error", err)
 		h.respondError(w, http.StatusUnauthorized, err.Error())
 		return
 	}
@@ -88,6 +97,22 @@ func (h *MFAHandler) Challenge(w http.ResponseWriter, r *http.Request) {
 	h.respondJSON(w, http.StatusOK, res)
 }
 
+func (h *MFAHandler) Disable(w http.ResponseWriter, r *http.Request) {
+	authCtx, err := middleware.GetAuthContext(r.Context())
+	if err != nil {
+		h.respondError(w, http.StatusUnauthorized, "Unauthorized")
+		return
+	}
+
+	if err := h.mfaService.DisableMFA(r.Context(), authCtx.UserID); err != nil {
+		h.logger.ErrorContext(r.Context(), "MFA disable failed", "error", err, "userID", authCtx.UserID)
+		h.respondError(w, http.StatusInternalServerError, "Internal server error")
+		return
+	}
+
+	h.respondJSON(w, http.StatusOK, map[string]string{"status": "success", "message": "MFA disabled"})
+}
+
 func (h *MFAHandler) respondJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -102,9 +127,5 @@ func (h *MFAHandler) respondError(w http.ResponseWriter, status int, message str
 }
 
 func (h *MFAHandler) getIPAddress(r *http.Request) string {
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip == "" {
-		ip = r.RemoteAddr
-	}
-	return strings.Split(ip, ":")[0]
+	return extractIP(r.RemoteAddr)
 }

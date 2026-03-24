@@ -2,7 +2,7 @@ package handler
 
 import (
 	"encoding/json"
-	"net"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,10 +14,14 @@ import (
 
 type AuthHandler struct {
 	authService service.AuthService
+	logger      *slog.Logger
 }
 
-func NewAuthHandler(authService service.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService service.AuthService, logger *slog.Logger) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+		logger:      logger,
+	}
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +32,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 
 	var req model.RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode register request", "error", err)
 		h.respondError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
@@ -77,7 +82,7 @@ func (h *AuthHandler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		h.respondError(w, http.StatusInternalServerError, "Internal server error")
+		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -95,6 +100,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	var req model.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.WarnContext(r.Context(), "failed to decode login request", "error", err)
 		h.respondError(w, http.StatusBadRequest, "Invalid JSON body")
 		return
 	}
@@ -116,6 +122,10 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusForbidden, err.Error())
 			return
 		}
+		if strings.Contains(err.Error(), "verify your email") {
+			h.respondError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		h.respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -130,7 +140,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 			SameSite: http.SameSiteStrictMode,
 			MaxAge:   2592000, // 30 days
 		})
-		// res.RefreshToken = "" // Hide from JSON
+		res.RefreshToken = "" // Hide from JSON
 	}
 
 	h.respondJSON(w, http.StatusOK, map[string]interface{}{
@@ -169,6 +179,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	res, err := h.authService.RefreshToken(r.Context(), refreshStr, ipAddress, userAgent)
 	if err != nil {
 		if strings.Contains(err.Error(), "suspicious activity") {
+			h.logger.WarnContext(r.Context(), "suspicious refresh activity", "error", err, "ip", ipAddress)
 			// Clear the suspicious cookie
 			http.SetCookie(w, &http.Cookie{
 				Name:     "refresh_token",
@@ -180,6 +191,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
+		h.logger.ErrorContext(r.Context(), "refresh token failed", "error", err)
 		h.respondError(w, http.StatusUnauthorized, "Invalid or expired refresh token")
 		return
 	}
@@ -250,6 +262,7 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		h.logger.ErrorContext(r.Context(), "password reset failed", "error", err)
 		h.respondError(w, http.StatusInternalServerError, "Internal server error")
 		return
 	}
@@ -272,7 +285,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.authService.Logout(r.Context(), authCtx.SessionID, authCtx.UserID, authCtx.SessionID) // Pass SessionID as the "tokenHash" parameter for now if we want to bypass refactoring the signature, but better to fix both.
+	err = h.authService.Logout(r.Context(), authCtx.SessionID, authCtx.UserID, authCtx.TokenHash)
 	if err != nil {
 		h.respondError(w, http.StatusInternalServerError, "Logout failed")
 		return
@@ -339,37 +352,6 @@ func (h *AuthHandler) respondError(w http.ResponseWriter, status int, message st
 	})
 }
 
-func normalizeIP(ip string) string {
-	ip = strings.TrimSpace(ip)
-	ip = strings.Trim(ip, "[]") // remove bracket
-
-	parsed := net.ParseIP(ip)
-	if parsed == nil {
-		return "" // atau error handling
-	}
-
-	return parsed.String()
-}
-
-func extractIP(addr string) string {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return addr
-	}
-	return normalizeIP(host)
-}
-
 func (h *AuthHandler) getIPAddress(r *http.Request) string {
-	ip := r.Header.Get("X-Forwarded-For")
-	if ip != "" {
-		parts := strings.Split(ip, ",")
-		return normalizeIP(strings.TrimSpace(parts[0]))
-	}
-
-	ip = r.Header.Get("X-Real-IP")
-	if ip != "" {
-		return normalizeIP(ip)
-	}
-
 	return extractIP(r.RemoteAddr)
 }

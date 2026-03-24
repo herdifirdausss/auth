@@ -69,6 +69,20 @@ func (mr *MockMFARepositoryMockRecorder) Create(ctx, method any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockMFARepository)(nil).Create), ctx, method)
 }
 
+// DeactivateAll mocks base method.
+func (m *MockMFARepository) DeactivateAll(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeactivateAll", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeactivateAll indicates an expected call of DeactivateAll.
+func (mr *MockMFARepositoryMockRecorder) DeactivateAll(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateAll", reflect.TypeOf((*MockMFARepository)(nil).DeactivateAll), ctx, userID)
+}
+
 // FindInactiveByUser mocks base method.
 func (m *MockMFARepository) FindInactiveByUser(ctx context.Context, userID, methodType string) (*model.MFAMethod, error) {
 	m.ctrl.T.Helper()

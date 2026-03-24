@@ -47,7 +47,7 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 			security.JWTConfig{}, slog.Default(),
 		)
 
-		return mock, NewAuthHandler(authService)
+		return mock, NewAuthHandler(authService, slog.Default())
 	}
 
 	t.Run("ForgotPassword_UserEnumeration_Timing", func(t *testing.T) {
@@ -113,19 +113,19 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 				AddRow("token-1", "user-1", "password_reset", tokenHash, time.Now().Add(time.Hour), nil, "127.0.0.1", "ua", time.Now()))
 
 		// 2. Check History
-		mock.ExpectQuery(`SELECT password_hash FROM user_password_history WHERE user_id = \$1`).
+		mock.ExpectQuery(`SELECT password_hash, password_salt FROM password_history WHERE user_id = \$1`).
 			WithArgs("user-1", 5).
-			WillReturnRows(pgxmock.NewRows([]string{"password_hash"}))
+			WillReturnRows(pgxmock.NewRows([]string{"password_hash", "password_salt"}))
 
 		// 3. Transaction
 		mock.ExpectBegin()
 		mock.ExpectExec(`UPDATE user_credentials`).
 			WithArgs("user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
-		mock.ExpectExec(`INSERT INTO user_password_history`).
-			WithArgs("user-1", pgxmock.AnyArg()).
+		mock.ExpectExec(`INSERT INTO password_history`).
+			WithArgs("user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).
 			WillReturnResult(pgxmock.NewResult("INSERT", 1))
-		mock.ExpectExec(`DELETE FROM user_password_history WHERE id IN`).
+		mock.ExpectExec(`DELETE FROM password_history WHERE id IN`).
 			WithArgs("user-1", 5).
 			WillReturnResult(pgxmock.NewResult("DELETE", 0))
 		mock.ExpectExec(`UPDATE security_tokens SET used_at = now\(\)`).

@@ -18,7 +18,8 @@ func TestValidateRegisterRequest(t *testing.T) {
 			req: &model.RegisterRequest{
 				Username: "test_user",
 				Email:    "test@example.com",
-				Password: "Password123!",
+				Password:   "Password123!",
+				TenantSlug: "test-tenant",
 			},
 			wantErr:  false,
 			errCount: 0,
@@ -28,7 +29,8 @@ func TestValidateRegisterRequest(t *testing.T) {
 			req: &model.RegisterRequest{
 				Username: "test_user",
 				Email:    "invalid-email",
-				Password: "Password123!",
+				Password:   "Password123!",
+				TenantSlug: "test-tenant",
 			},
 			wantErr:  true,
 			errCount: 1,
@@ -38,7 +40,8 @@ func TestValidateRegisterRequest(t *testing.T) {
 			req: &model.RegisterRequest{
 				Username: "te",
 				Email:    "test@example.com",
-				Password: "Password123!",
+				Password:   "Password123!",
+				TenantSlug: "test-tenant",
 			},
 			wantErr:  true,
 			errCount: 2,
@@ -48,7 +51,8 @@ func TestValidateRegisterRequest(t *testing.T) {
 			req: &model.RegisterRequest{
 				Username: "test_user",
 				Email:    "test@example.com",
-				Password: "password",
+				Password:   "password",
+				TenantSlug: "test-tenant",
 			},
 			wantErr:  true,
 			errCount: 1,

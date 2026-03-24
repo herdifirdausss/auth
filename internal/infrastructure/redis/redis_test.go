@@ -40,7 +40,7 @@ func TestSessionCache(t *testing.T) {
 	}
 
 	// Delete
-	if err := sc.Delete(ctx, tokenHash); err != nil {
+	if err := sc.Delete(ctx, session.UserID, tokenHash); err != nil {
 		t.Fatalf("delete failed: %v", err)
 	}
 
