@@ -11,6 +11,7 @@ const authContextKey contextKey = "auth_context"
 
 type AuthContext struct {
 	UserID      string
+	Email       string
 	TenantID    string
 	SessionID   string
 	MFAVerified bool

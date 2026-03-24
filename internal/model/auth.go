@@ -130,3 +130,63 @@ type MFAMethod struct {
 	CreatedAt             time.Time  `json:"created_at"`
 	UpdatedAt             time.Time  `json:"updated_at"`
 }
+
+type LoginRequest struct {
+	Email             string `json:"email" validate:"required,email"`
+	Password          string `json:"password" validate:"required"`
+	DeviceFingerprint string `json:"device_fingerprint"`
+	DeviceName        string `json:"device_name"`
+}
+
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	MFARequired  bool   `json:"mfa_required,omitempty"`
+	MFAToken     string `json:"mfa_token,omitempty"`
+}
+
+type SetupResponse struct {
+	Secret    string `json:"secret"`
+	QRCodeURL string `json:"qr_code_url"`
+}
+
+type VerifySetupRequest struct {
+	OTPCode string `json:"otp_code" validate:"required"`
+}
+
+type VerifySetupResponse struct {
+	BackupCodes []string `json:"backup_codes"`
+}
+
+type ChallengeRequest struct {
+	MFAToken string `json:"mfa_token" validate:"required"`
+	OTPCode  string `json:"otp_code" validate:"required"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
+type UserPasswordHistory struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	PasswordHash string    `json:"password_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Role struct {
+	ID          string    `json:"id"`
+	TenantID    *string   `json:"tenant_id,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
