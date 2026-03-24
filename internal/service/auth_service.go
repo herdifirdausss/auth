@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/herdifirdausss/auth/internal/validator"
-	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 )
 
 //go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
@@ -30,21 +30,21 @@ type AuthService interface {
 }
 
 type AuthServiceImpl struct {
-	db              *sql.DB
-	userRepo        repository.UserRepository
-	credRepo        repository.CredentialRepository
-	tokenRepo       repository.SecurityTokenRepository
-	eventRepo       repository.SecurityEventRepository
-	tenantRepo      repository.TenantRepository
-	membershipRepo  repository.TenantMembershipRepository
-	sessionRepo     repository.SessionRepository
-	refreshTokenRepo repository.RefreshTokenRepository
-	mfaRepo         repository.MFARepository
+	db                  *sql.DB
+	userRepo            repository.UserRepository
+	credRepo            repository.CredentialRepository
+	tokenRepo           repository.SecurityTokenRepository
+	eventRepo           repository.SecurityEventRepository
+	tenantRepo          repository.TenantRepository
+	membershipRepo      repository.TenantMembershipRepository
+	sessionRepo         repository.SessionRepository
+	refreshTokenRepo    repository.RefreshTokenRepository
+	mfaRepo             repository.MFARepository
 	passwordHistoryRepo repository.PasswordHistoryRepository
-	hasher          security.PasswordHasher
-	rateLimiter    redis.RateLimiter
-	sessionCache   redis.SessionCache
-	jwtConfig      security.JWTConfig
+	hasher              security.PasswordHasher
+	rateLimiter         redis.RateLimiter
+	sessionCache        redis.SessionCache
+	jwtConfig           security.JWTConfig
 }
 
 func NewAuthService(
@@ -65,21 +65,21 @@ func NewAuthService(
 	jwtConfig security.JWTConfig,
 ) *AuthServiceImpl {
 	return &AuthServiceImpl{
-		db:              db,
-		userRepo:        userRepo,
-		credRepo:        credRepo,
-		tokenRepo:       tokenRepo,
-		eventRepo:       eventRepo,
-		tenantRepo:      tenantRepo,
-		membershipRepo:  membershipRepo,
-		sessionRepo:     sessionRepo,
-		refreshTokenRepo: refreshTokenRepo,
-		mfaRepo:         mfaRepo,
+		db:                  db,
+		userRepo:            userRepo,
+		credRepo:            credRepo,
+		tokenRepo:           tokenRepo,
+		eventRepo:           eventRepo,
+		tenantRepo:          tenantRepo,
+		membershipRepo:      membershipRepo,
+		sessionRepo:         sessionRepo,
+		refreshTokenRepo:    refreshTokenRepo,
+		mfaRepo:             mfaRepo,
 		passwordHistoryRepo: passwordHistoryRepo,
-		hasher:          hasher,
-		rateLimiter:    rateLimiter,
-		sessionCache:   sessionCache,
-		jwtConfig:      jwtConfig,
+		hasher:              hasher,
+		rateLimiter:         rateLimiter,
+		sessionCache:        sessionCache,
+		jwtConfig:           jwtConfig,
 	}
 }
 
@@ -301,7 +301,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		if count >= 10 {
 			s.userRepo.SuspendUser(ctx, user.ID)
 		}
-		
+
 		s.eventRepo.Create(ctx, &model.SecurityEvent{
 			UserID:    &user.ID,
 			EventType: "auth.login_failed",
@@ -310,7 +310,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 			IPAddress: ip,
 			UserAgent: userAgent,
 		})
-		
+
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
@@ -339,7 +339,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 	// 10. Session & Tokens
 	sessionToken, _ := security.GenerateSecureToken(32)
 	sessionHash := security.HashToken(sessionToken)
-	
+
 	refreshToken, _ := security.GenerateSecureToken(32)
 	refreshHash := security.HashToken(refreshToken)
 	familyID, _ := security.GenerateSecureToken(16)
@@ -412,7 +412,7 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		claims.Tid = *tenantID
 	}
 	// Add roles if needed...
-	
+
 	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
 	if err != nil {
 		return nil, err
@@ -490,11 +490,11 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 
 		s.refreshTokenRepo.RevokeByFamily(ctx, tx, token.FamilyID)
 		s.sessionRepo.RevokeByID(ctx, token.SessionID, "refresh_token_reuse", "system")
-		
+
 		if err := tx.Commit(); err != nil {
 			return nil, err
 		}
-		
+
 		// Clear cache
 		// We don't have the token_hash for the access token here, but we can't easily clear it.
 		// However, session lookup in DB will fail since it's revoked.
@@ -517,7 +517,7 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 	// 6.2 Create new refresh token
 	newRawRefresh, _ := security.GenerateSecureToken(32)
 	newRefreshHash := security.HashToken(newRawRefresh)
-	
+
 	newRefreshToken := &model.RefreshToken{
 		SessionID:     token.SessionID,
 		UserID:        token.UserID,
@@ -562,7 +562,7 @@ func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, i
 		claims.Tid = *session.TenantID
 	}
 	// Add roles if needed...
-	
+
 	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
 	if err != nil {
 		return nil, err
@@ -658,12 +658,12 @@ func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPasswo
 		// If our hasher uses separate salt, we have a problem.
 		// Let's check security.PasswordHasher interface.
 		// func Verify(password, hash, salt string) (bool, error)
-		
+
 		// If we don't store salt in password_history, we can't verify properly with the current interface.
 		// I'll update the repository to store salt too or use encoded format.
 		// For now, let's assume hash is sufficient for comparison if it's the SAME hash.
 		// But Argon2id with random salt will produce different hashes.
-		
+
 		// Let's check how we verify.
 		match, _ := s.hasher.Verify(newPassword, oldHash, "") // This might not work if salt is needed.
 		if match {

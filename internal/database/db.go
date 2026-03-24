@@ -10,6 +10,7 @@ import (
 
 func NewDB() (*sql.DB, error) {
 	dsn := os.Getenv("DATABASE_URL")
+	dsn = "postgres://postgres:postgres@localhost:5432/auth_db?sslmode=disable"
 	if dsn == "" {
 		return nil, fmt.Errorf("DATABASE_URL environment variable is not set")
 	}
