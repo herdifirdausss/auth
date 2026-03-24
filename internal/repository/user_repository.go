@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type UserRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, user *model.User) error
 	FindByEmail(ctx context.Context, email string) (*model.User, error)

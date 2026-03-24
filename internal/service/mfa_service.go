@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/security"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=service
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type MFAService interface {
 	SetupTOTP(ctx context.Context, userID, email string) (*model.SetupResponse, error)
 	VerifySetup(ctx context.Context, userID, otpCode string) (*model.VerifySetupResponse, error)
@@ -28,6 +29,7 @@ type MFAServiceImpl struct {
 	jwtConfig    security.JWTConfig
 	rateLimiter   redis.RateLimiter
 	encryptionKey string
+	logger        *slog.Logger
 }
 
 func NewMFAService(
@@ -38,6 +40,7 @@ func NewMFAService(
 	rfRepo repository.RefreshTokenRepository,
 	jwtConfig security.JWTConfig,
 	rateLimiter redis.RateLimiter,
+	logger *slog.Logger,
 ) *MFAServiceImpl {
 	key := os.Getenv("MFA_ENCRYPTION_KEY")
 	if key == "" {
@@ -53,6 +56,7 @@ func NewMFAService(
 		jwtConfig:     jwtConfig,
 		rateLimiter:   rateLimiter,
 		encryptionKey: key,
+		logger:        logger,
 	}
 }
 

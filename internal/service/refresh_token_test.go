@@ -2,11 +2,12 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/herdifirdausss/auth/internal/security"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -16,12 +17,12 @@ func TestRefreshToken_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := repository.NewMockTransactor(ctrl)
-	mockTx := repository.NewMockTx(ctrl)
+	mockDB := mocks.NewMockTransactor(ctrl)
+	mockTx := mocks.NewMockTx(ctrl)
 
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 	
 	s := &AuthServiceImpl{
 		db: mockDB,
@@ -32,6 +33,7 @@ func TestRefreshToken_Success(t *testing.T) {
 			SecretKey: []byte("test"),
 			AccessExpiry: 15 * time.Minute,
 		},
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "old-refresh-token"
@@ -67,18 +69,19 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := repository.NewMockTransactor(ctrl)
-	mockTx := repository.NewMockTx(ctrl)
+	mockDB := mocks.NewMockTransactor(ctrl)
+	mockTx := mocks.NewMockTx(ctrl)
 
-	rfRepo := repository.NewMockRefreshTokenRepository(ctrl)
-	sessRepo := repository.NewMockSessionRepository(ctrl)
-	eventRepo := repository.NewMockSecurityEventRepository(ctrl)
+	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
+	sessRepo := mocks.NewMockSessionRepository(ctrl)
+	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 	
 	s := &AuthServiceImpl{
 		db: mockDB,
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
 		eventRepo: eventRepo,
+		logger: slog.Default(),
 	}
 
 	rawRefresh := "reused-token"

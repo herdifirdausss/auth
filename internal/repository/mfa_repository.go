@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type MFARepository interface {
 	FindPrimaryActive(ctx context.Context, userID string) (*model.MFAMethod, error)
 	Create(ctx context.Context, method *model.MFAMethod) error

@@ -11,7 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type TenantRepository interface {
 	FindBySlug(ctx context.Context, slug string) (*model.Tenant, error)
 }
@@ -37,7 +37,7 @@ func (r *PostgresTenantRepository) FindBySlug(ctx context.Context, slug string) 
 	return &tenant, nil
 }
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+// directive for the whole file is already at the top
 type TenantMembershipRepository interface {
 	Create(ctx context.Context, tx pgx.Tx, membership *model.TenantMembership) error
 	FindActiveByUserID(ctx context.Context, userID string) (*model.TenantMembership, error)

@@ -62,5 +62,24 @@ func NewLogger(env string) *slog.Logger {
 }
 
 func FromContext(ctx context.Context) *slog.Logger {
-	return slog.Default()
+	l := slog.Default()
+	if requestID := middleware.GetRequestID(ctx); requestID != "" {
+		l = l.With(slog.String("request_id", requestID))
+	}
+	
+	span := trace.SpanFromContext(ctx)
+	if span.SpanContext().IsValid() {
+		l = l.With(
+			slog.String("trace_id", span.SpanContext().TraceID().String()),
+			slog.String("span_id", span.SpanContext().SpanID().String()),
+		)
+	}
+
+	if authCtx, err := middleware.GetAuthContext(ctx); err == nil && authCtx != nil {
+		if authCtx.UserID != "" {
+			l = l.With(slog.String("user_id", authCtx.UserID))
+		}
+	}
+	
+	return l
 }

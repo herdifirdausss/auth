@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
-	"github.com/herdifirdausss/auth/internal/repository"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 )
@@ -15,7 +15,7 @@ func TestHasPermission_Allowed(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -30,7 +30,7 @@ func TestHasPermission_Denied(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -45,7 +45,7 @@ func TestHasPermission_SuperAdmin(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestHasPermission_ResourceWildcard(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -75,7 +75,7 @@ func TestHasPermission_Error(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -90,7 +90,7 @@ func TestGetUserPermissions_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -105,7 +105,7 @@ func TestGetUserPermissions_NoRoles(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
@@ -120,7 +120,7 @@ func TestGetUserRoles_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockRepo := repository.NewMockRoleRepository(ctrl)
+	mockRepo := mocks.NewMockRoleRepository(ctrl)
 	svc := NewDefaultPermissionService(mockRepo)
 
 	ctx := context.Background()
