@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,43 +8,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/herdifirdausss/auth/internal/mocks"
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"go.uber.org/mock/gomock"
 )
 
-type mockAuthService struct{ mock.Mock }
-
-func (m *mockAuthService) Register(ctx context.Context, req *model.RegisterRequest, ip string, ua string) (*model.RegisterResponse, error) {
-	args := m.Called(ctx, req, ip, ua)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*model.RegisterResponse), args.Error(1)
-}
-
-func (m *mockAuthService) VerifyEmail(ctx context.Context, token string, ip string, ua string) error {
-	return m.Called(ctx, token, ip, ua).Error(0)
-}
-
-func (m *mockAuthService) Login(ctx context.Context, req *model.LoginRequest, ip string, ua string) (*model.LoginResponse, error) {
-	args := m.Called(ctx, req, ip, ua)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*model.LoginResponse), args.Error(1)
-}
-
-func (m *mockAuthService) RefreshToken(ctx context.Context, token string, ip string, ua string) (*model.LoginResponse, error) {
-	args := m.Called(ctx, token, ip, ua)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*model.LoginResponse), args.Error(1)
-}
-
 func TestRefreshHandler_Success(t *testing.T) {
-	mockService := new(mockAuthService)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	res := &model.LoginResponse{
@@ -55,7 +27,7 @@ func TestRefreshHandler_Success(t *testing.T) {
 		ExpiresIn:    900,
 	}
 
-	mockService.On("RefreshToken", mock.Anything, "old-refresh", mock.Anything, mock.Anything).Return(res, nil)
+	mockService.EXPECT().RefreshToken(gomock.Any(), "old-refresh", gomock.Any(), gomock.Any()).Return(res, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "old-refresh"})
@@ -85,7 +57,9 @@ func TestRefreshHandler_Success(t *testing.T) {
 }
 
 func TestRefreshHandler_NoCookie(t *testing.T) {
-	mockService := new(mockAuthService)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
@@ -97,10 +71,12 @@ func TestRefreshHandler_NoCookie(t *testing.T) {
 }
 
 func TestRefreshHandler_ReuseDetected(t *testing.T) {
-	mockService := new(mockAuthService)
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService)
 
-	mockService.On("RefreshToken", mock.Anything, "reused-token", mock.Anything, mock.Anything).
+	mockService.EXPECT().RefreshToken(gomock.Any(), "reused-token", gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("suspicious activity detected"))
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)

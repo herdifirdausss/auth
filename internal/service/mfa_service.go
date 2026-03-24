@@ -2,8 +2,8 @@ package service
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -13,6 +13,7 @@ import (
 	"github.com/herdifirdausss/auth/internal/security"
 )
 
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type MFAService interface {
 	SetupTOTP(ctx context.Context, userID, email string) (*model.SetupResponse, error)
 	VerifySetup(ctx context.Context, userID, otpCode string) (*model.VerifySetupResponse, error)
@@ -20,7 +21,7 @@ type MFAService interface {
 }
 
 type MFAServiceImpl struct {
-	db           *sql.DB
+	db           repository.Transactor
 	mfaRepo      repository.MFARepository
 	userRepo     repository.UserRepository
 	sessRepo     repository.SessionRepository
@@ -28,16 +29,18 @@ type MFAServiceImpl struct {
 	jwtConfig    security.JWTConfig
 	rateLimiter   redis.RateLimiter
 	encryptionKey string
+	logger        *slog.Logger
 }
 
 func NewMFAService(
-	db *sql.DB,
+	db repository.Transactor,
 	mfaRepo repository.MFARepository,
 	userRepo repository.UserRepository,
 	sessRepo repository.SessionRepository,
 	rfRepo repository.RefreshTokenRepository,
 	jwtConfig security.JWTConfig,
 	rateLimiter redis.RateLimiter,
+	logger *slog.Logger,
 ) *MFAServiceImpl {
 	key := os.Getenv("MFA_ENCRYPTION_KEY")
 	if key == "" {
@@ -53,6 +56,7 @@ func NewMFAService(
 		jwtConfig:     jwtConfig,
 		rateLimiter:   rateLimiter,
 		encryptionKey: key,
+		logger:        logger,
 	}
 }
 
@@ -185,11 +189,11 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 	}
 
 	// Success: Create session in tx
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	session := &model.Session{
 		UserID:            userID,
@@ -225,7 +229,7 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 		return nil, err
 	}
 
-	if err := tx.Commit(); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
 
@@ -241,3 +245,4 @@ func (s *MFAServiceImpl) Challenge(ctx context.Context, mfaToken, otpCode string
 		ExpiresIn:    900,
 	}, nil
 }
+
