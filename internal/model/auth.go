@@ -78,3 +78,115 @@ type TenantMembership struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type Session struct {
+	ID                string     `json:"id"`
+	UserID            string     `json:"user_id"`
+	TenantID          *string    `json:"tenant_id"`
+	MembershipID      *string    `json:"membership_id"`
+	TokenHash         string     `json:"token_hash"`
+	IPAddress         string     `json:"ip_address"`
+	UserAgent         string     `json:"user_agent"`
+	DeviceFingerprint string     `json:"device_fingerprint"`
+	DeviceName        string     `json:"device_name"`
+	MFAVerified       bool       `json:"mfa_verified"`
+	ExpiresAt         time.Time  `json:"expires_at"`
+	IdleTimeoutAt     time.Time  `json:"idle_timeout_at"`
+	LastActivityAt    time.Time  `json:"last_activity_at"`
+	RevokedAt         *time.Time `json:"revoked_at"`
+	RevokedReason     string     `json:"revoked_reason"`
+	RevokedBy         *string    `json:"revoked_by"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+}
+
+type RefreshToken struct {
+	ID                string     `json:"id"`
+	SessionID         string     `json:"session_id"`
+	UserID            string     `json:"user_id"`
+	TokenHash         string     `json:"token_hash"`
+	FamilyID          string     `json:"family_id"`
+	Generation        int        `json:"generation"`
+	ParentTokenID     *string    `json:"parent_token_id"`
+	IPAddress         string     `json:"ip_address"`
+	UserAgent         string     `json:"user_agent"`
+	DeviceFingerprint string     `json:"device_fingerprint"`
+	ExpiresAt         time.Time  `json:"expires_at"`
+	UsedAt            *time.Time `json:"used_at"`
+	RevokedAt         *time.Time `json:"revoked_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
+
+type MFAMethod struct {
+	ID                    string     `json:"id"`
+	UserID                string     `json:"user_id"`
+	MethodType            string     `json:"method_type"`
+	MethodName            string     `json:"method_name"`
+	SecretEncrypted       string     `json:"secret_encrypted"`
+	BackupCodesEncrypted  string     `json:"backup_codes_encrypted"`
+	IsActive              bool       `json:"is_active"`
+	IsPrimary             bool       `json:"is_primary"`
+	LastUsedAt            *time.Time `json:"last_used_at"`
+	CreatedAt             time.Time  `json:"created_at"`
+	UpdatedAt             time.Time  `json:"updated_at"`
+}
+
+type LoginRequest struct {
+	Email             string `json:"email" validate:"required,email"`
+	Password          string `json:"password" validate:"required"`
+	DeviceFingerprint string `json:"device_fingerprint"`
+	DeviceName        string `json:"device_name"`
+}
+
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token,omitempty"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	MFARequired  bool   `json:"mfa_required,omitempty"`
+	MFAToken     string `json:"mfa_token,omitempty"`
+}
+
+type SetupResponse struct {
+	Secret    string `json:"secret"`
+	QRCodeURL string `json:"qr_code_url"`
+}
+
+type VerifySetupRequest struct {
+	OTPCode string `json:"otp_code" validate:"required"`
+}
+
+type VerifySetupResponse struct {
+	BackupCodes []string `json:"backup_codes"`
+}
+
+type ChallengeRequest struct {
+	MFAToken string `json:"mfa_token" validate:"required"`
+	OTPCode  string `json:"otp_code" validate:"required"`
+}
+
+type ForgotPasswordRequest struct {
+	Email string `json:"email" validate:"required,email"`
+}
+
+type ResetPasswordRequest struct {
+	Token       string `json:"token" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
+type UserPasswordHistory struct {
+	ID           string    `json:"id"`
+	UserID       string    `json:"user_id"`
+	PasswordHash string    `json:"password_hash"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type Role struct {
+	ID          string    `json:"id"`
+	TenantID    *string   `json:"tenant_id,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
