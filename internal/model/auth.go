@@ -180,3 +180,13 @@ type UserPasswordHistory struct {
 	PasswordHash string    `json:"password_hash"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+type Role struct {
+	ID          string    `json:"id"`
+	TenantID    *string   `json:"tenant_id,omitempty"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Permissions []string  `json:"permissions"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}

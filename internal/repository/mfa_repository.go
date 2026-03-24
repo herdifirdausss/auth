@@ -2,13 +2,15 @@ package repository
 
 import (
 	"context"
-	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/herdifirdausss/auth/internal/model"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=mock_$GOFILE -package=repository
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 type MFARepository interface {
 	FindPrimaryActive(ctx context.Context, userID string) (*model.MFAMethod, error)
 	Create(ctx context.Context, method *model.MFAMethod) error
@@ -18,10 +20,10 @@ type MFARepository interface {
 }
 
 type PostgresMFARepository struct {
-	db *sql.DB
+	db *pgxpool.Pool
 }
 
-func NewPostgresMFARepository(db *sql.DB) *PostgresMFARepository {
+func NewPostgresMFARepository(db *pgxpool.Pool) *PostgresMFARepository {
 	return &PostgresMFARepository{db: db}
 }
 
@@ -31,12 +33,12 @@ func (r *PostgresMFARepository) FindPrimaryActive(ctx context.Context, userID st
 	          FROM mfa_methods WHERE user_id = $1 AND is_active = true AND is_primary = true`
 	
 	var m model.MFAMethod
-	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+	err := r.db.QueryRow(ctx, query, userID).Scan(
 		&m.ID, &m.UserID, &m.MethodType, &m.MethodName, &m.SecretEncrypted,
 		&m.BackupCodesEncrypted, &m.IsActive, &m.IsPrimary, &m.LastUsedAt, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("error finding primary MFA method: %w", err)
@@ -48,7 +50,7 @@ func (r *PostgresMFARepository) Create(ctx context.Context, method *model.MFAMet
 	query := `INSERT INTO mfa_methods (user_id, method_type, method_name, secret_encrypted, is_active, is_primary) 
 	          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at, updated_at`
 	
-	return r.db.QueryRowContext(ctx, query, method.UserID, method.MethodType, method.MethodName, 
+	return r.db.QueryRow(ctx, query, method.UserID, method.MethodType, method.MethodName, 
 		method.SecretEncrypted, method.IsActive, method.IsPrimary).
 		Scan(&method.ID, &method.CreatedAt, &method.UpdatedAt)
 }
@@ -59,12 +61,12 @@ func (r *PostgresMFARepository) FindInactiveByUser(ctx context.Context, userID, 
 	          FROM mfa_methods WHERE user_id = $1 AND method_type = $2 AND is_active = false`
 	
 	var m model.MFAMethod
-	err := r.db.QueryRowContext(ctx, query, userID, methodType).Scan(
+	err := r.db.QueryRow(ctx, query, userID, methodType).Scan(
 		&m.ID, &m.UserID, &m.MethodType, &m.MethodName, &m.SecretEncrypted,
 		&m.BackupCodesEncrypted, &m.IsActive, &m.IsPrimary, &m.LastUsedAt, &m.CreatedAt, &m.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("error finding inactive MFA method: %w", err)
@@ -74,12 +76,13 @@ func (r *PostgresMFARepository) FindInactiveByUser(ctx context.Context, userID, 
 
 func (r *PostgresMFARepository) Activate(ctx context.Context, id string) error {
 	query := `UPDATE mfa_methods SET is_active = true, is_primary = true WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id)
+	_, err := r.db.Exec(ctx, query, id)
 	return err
 }
 
 func (r *PostgresMFARepository) SetBackupCodes(ctx context.Context, id, encrypted string) error {
 	query := `UPDATE mfa_methods SET backup_codes_encrypted = $2 WHERE id = $1`
-	_, err := r.db.ExecContext(ctx, query, id, encrypted)
+	_, err := r.db.Exec(ctx, query, id, encrypted)
 	return err
 }
+

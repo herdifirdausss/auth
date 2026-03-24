@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
@@ -13,13 +14,15 @@ type AuthMiddleware struct {
 	jwtConfig    security.JWTConfig
 	sessionRepo  repository.SessionRepository
 	sessionCache redis.SessionCache
+	membershipRepo repository.TenantMembershipRepository
 }
 
-func NewAuthMiddleware(cfg security.JWTConfig, repo repository.SessionRepository, cache redis.SessionCache) *AuthMiddleware {
+func NewAuthMiddleware(cfg security.JWTConfig, repo repository.SessionRepository, cache redis.SessionCache, membershipRepo repository.TenantMembershipRepository) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtConfig:    cfg,
 		sessionRepo:  repo,
 		sessionCache: cache,
+		membershipRepo: membershipRepo,
 	}
 }
 
@@ -108,4 +111,59 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		ctx := SetAuthContext(r.Context(), authCtx)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+func (m *AuthMiddleware) HasPermission(permission string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authCtx, err := GetAuthContext(r.Context())
+			if err != nil {
+				writeUnauthorized(w, "Unauthorized")
+				return
+			}
+
+			if authCtx.TenantID == "" {
+				writeForbidden(w, "No tenant context")
+				return
+			}
+
+			permissions, err := m.membershipRepo.FindPermissionsByUserAndTenant(r.Context(), authCtx.UserID, authCtx.TenantID)
+			if err != nil {
+				writeError(w, http.StatusInternalServerError, "Internal server error")
+				return
+			}
+
+			hasPerm := false
+			for _, p := range permissions {
+				if matchPermission(p, permission) {
+					hasPerm = true
+					break
+				}
+			}
+
+			if !hasPerm {
+				writeForbidden(w, "Insufficient permissions")
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func matchPermission(pattern, required string) bool {
+	if pattern == "*" {
+		return true
+	}
+	if pattern == required {
+		return true
+	}
+	if strings.HasSuffix(pattern, ":*") {
+		prefix := strings.TrimSuffix(pattern, "*")
+		return strings.HasPrefix(required, prefix)
+	}
+	return false
+}
+
+func writeForbidden(w http.ResponseWriter, message string) {
+	writeError(w, http.StatusForbidden, message)
 }
