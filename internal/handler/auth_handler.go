@@ -46,7 +46,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if strings.Contains(err.Error(), "already exists") {
+		if strings.Contains(err.Error(), "already exists") || strings.Contains(err.Error(), "already registered") {
 			h.respondError(w, http.StatusConflict, err.Error())
 			return
 		}
@@ -54,6 +54,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 			h.respondError(w, http.StatusNotFound, err.Error())
 			return
 		}
+		h.logger.Error("registration failed", "error", err)
 		h.respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -108,13 +109,18 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	ipAddress := h.getIPAddress(r)
 	userAgent := r.UserAgent()
 
+	if req.DeviceFingerprint == "" {
+		req.DeviceFingerprint = r.Header.Get("X-Device-Fingerprint")
+	}
+
 	res, err := h.authService.Login(r.Context(), &req, ipAddress, userAgent)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "login failed", "error", err, "email", req.Email)
 		if strings.Contains(err.Error(), "invalid email or password") {
 			h.respondError(w, http.StatusUnauthorized, err.Error())
 			return
 		}
-		if strings.Contains(err.Error(), "too many login attempts") {
+		if strings.Contains(err.Error(), "too many attempts") {
 			h.respondError(w, http.StatusTooManyRequests, err.Error())
 			return
 		}
@@ -155,20 +161,22 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cookie, err := r.Cookie("refresh_token")
-	var refreshStr string
-	if err == nil {
-		refreshStr = cookie.Value
-	} else {
-		// Fallback to Authorization: Bearer <refresh_token> for tests/clients
-		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
-			// Extract everything after "bearer " and trim it
-			refreshStr = strings.TrimSpace(authHeader[7:])
+	var req model.RefreshTokenRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	if req.RefreshToken == "" {
+		cookie, err := r.Cookie("refresh_token")
+		if err == nil {
+			req.RefreshToken = cookie.Value
+		} else {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(strings.ToLower(authHeader), "bearer ") {
+				req.RefreshToken = strings.TrimSpace(authHeader[7:])
+			}
 		}
 	}
 
-	if refreshStr == "" {
+	if req.RefreshToken == "" {
 		h.respondError(w, http.StatusUnauthorized, "Refresh token required")
 		return
 	}
@@ -176,7 +184,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	ipAddress := h.getIPAddress(r)
 	userAgent := r.UserAgent()
 
-	res, err := h.authService.RefreshToken(r.Context(), refreshStr, ipAddress, userAgent)
+	if req.DeviceFingerprint == "" {
+		req.DeviceFingerprint = r.Header.Get("X-Device-Fingerprint")
+	}
+
+	res, err := h.authService.RefreshToken(r.Context(), &req, ipAddress, userAgent)
 	if err != nil {
 		if strings.Contains(err.Error(), "suspicious activity") {
 			h.logger.WarnContext(r.Context(), "suspicious refresh activity", "error", err, "ip", ipAddress)
@@ -287,6 +299,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	err = h.authService.Logout(r.Context(), authCtx.SessionID, authCtx.UserID, authCtx.TokenHash)
 	if err != nil {
+		h.logger.ErrorContext(r.Context(), "logout failed", "error", err, "session_id", authCtx.SessionID)
 		h.respondError(w, http.StatusInternalServerError, "Logout failed")
 		return
 	}

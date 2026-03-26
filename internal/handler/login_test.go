@@ -104,7 +104,7 @@ func TestLoginHandler_TooManyAttempts(t *testing.T) {
 	body, _ := json.Marshal(reqBody)
 
 	mockService.EXPECT().Login(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil, fmt.Errorf("too many login attempts"))
+		Return(nil, fmt.Errorf("too many attempts for this email, try again later"))
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/login", bytes.NewBuffer(body))
 	w := httptest.NewRecorder()

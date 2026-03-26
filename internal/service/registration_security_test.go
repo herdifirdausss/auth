@@ -19,9 +19,15 @@ func TestRegister_UnicodeNormalization(t *testing.T) {
 	defer ctrl.Finish()
 
 	userRepo := mocks.NewMockUserRepository(ctrl)
+	passwordHistoryRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
+	mockDB := mocks.NewMockPool(ctrl)
 	s := &AuthServiceImpl{
-		userRepo: userRepo,
-		logger:   slog.Default(),
+		db:                  mockDB,
+		userRepo:            userRepo,
+		passwordHistoryRepo: passwordHistoryRepo,
+		riskService:         mocks.NewMockRiskService(ctrl),
+		pwnedValidator:      mocks.NewMockPwnedValidator(ctrl),
+		logger:              slog.Default(),
 	}
 
 	// Case 1: user@exämple.com (NFC)
@@ -41,12 +47,15 @@ func TestRegister_UnicodeNormalization(t *testing.T) {
 
 	// Expect ExistsByEmail to be called with normalized NFC email
 	normalizedEmail := "user@exämple.com" // NFC
-	userRepo.EXPECT().ExistsByEmail(ctx, normalizedEmail).Return(true, nil)
+	mockTx := mocks.NewMockTx(ctrl)
+	mockDB.EXPECT().Begin(ctx).Return(mockTx, nil)
+	userRepo.EXPECT().FindByEmail(ctx, normalizedEmail).Return(&model.User{Email: normalizedEmail}, nil)
+	mockTx.EXPECT().Rollback(ctx).Return(nil).AnyTimes()
 
 	_, err := s.Register(ctx, req, "1.1.1.1", "ua")
 	
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "email already exists")
+	assert.Contains(t, err.Error(), "already registered")
 }
 
 func TestLogin_TimingAttackDummyHash(t *testing.T) {
@@ -57,10 +66,14 @@ func TestLogin_TimingAttackDummyHash(t *testing.T) {
 	hasher := mocks.NewMockPasswordHasher(ctrl)
 	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 	
+	mockDB := mocks.NewMockPool(ctrl)
 	s := &AuthServiceImpl{
+		db:          mockDB,
 		userRepo:    userRepo,
 		hasher:      hasher,
 		rateLimiter: rateLimiter,
+		riskService: mocks.NewMockRiskService(ctrl),
+		pwnedValidator: mocks.NewMockPwnedValidator(ctrl),
 		logger:      slog.Default(),
 	}
 
@@ -97,6 +110,8 @@ func TestRegister_NullByteInjection(t *testing.T) {
 	s := &AuthServiceImpl{
 		userRepo: userRepo,
 		hasher:   hasher,
+		riskService: mocks.NewMockRiskService(ctrl),
+		pwnedValidator: mocks.NewMockPwnedValidator(ctrl),
 		logger:   slog.Default(),
 	}
 
@@ -109,22 +124,17 @@ func TestRegister_NullByteInjection(t *testing.T) {
 		TenantSlug: "test-tenant",
 	}
 
-	// Expect hasher.Hash to be called with the full password (including null byte)
-	hasher.EXPECT().Hash(passwordWithNull).Return("hash", "salt", nil)
-	userRepo.EXPECT().ExistsByEmail(gomock.Any(), gomock.Any()).Return(false, nil)
-	userRepo.EXPECT().ExistsByUsername(gomock.Any(), gomock.Any()).Return(false, nil)
+	// Register order:
+	// 1. validator (no mock needed if we don't mock it, it's a real call)
+	// 2. db.Begin -> we mock it to fail
 	
-	// Just test that the full password reaches the hasher
-	// (Transaction setup omitted for brevity in this specific unit test, or just mock everything)
-	
-	// For this test, I'll just check if it reaches Hash.
-	// Actually, I need a complete mock setup or it will panic.
-	// I'll skip the rest of Register if I just want to test if Hash is called.
-	
-	// Let's mock DB Begin to fail to stop early.
-	db := mocks.NewMockTransactor(ctrl)
+	db := mocks.NewMockPool(ctrl)
 	s.db = db
 	db.EXPECT().Begin(ctx).Return(nil, fmt.Errorf("stop test here"))
+	
+	// These will never be reached because of early return
+	// userRepo.EXPECT().FindByEmail(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+	// hasher.EXPECT().Hash(passwordWithNull).Return("hash", "salt", nil).AnyTimes()
 
 	_, _ = s.Register(ctx, req, "1.1.1.1", "ua")
 }

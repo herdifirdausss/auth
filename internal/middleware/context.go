@@ -10,12 +10,12 @@ type contextKey string
 const authContextKey contextKey = "auth_context"
 
 type AuthContext struct {
-	UserID      string
-	Email       string
-	TenantID    string
-	SessionID   string
-	MFAVerified bool
-	TokenHash   string
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	TenantID    string `json:"tenant_id"`
+	SessionID   string `json:"session_id"`
+	MFAVerified bool   `json:"mfa_verified"`
+	TokenHash   string `json:"token_hash"`
 }
 
 func SetAuthContext(ctx context.Context, auth *AuthContext) context.Context {

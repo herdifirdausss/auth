@@ -95,10 +95,10 @@ func NewPostgresSecurityTokenRepository(db Pool) *PostgresSecurityTokenRepositor
 }
 
 func (r *PostgresSecurityTokenRepository) Create(ctx context.Context, token *model.SecurityToken) error {
-	query := `INSERT INTO security_tokens (user_id, token_type, token_hash, expires_at, ip_address, user_agent) 
-	          VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, created_at`
-
-	err := r.db.QueryRow(ctx, query, token.UserID, token.TokenType, token.TokenHash, token.ExpiresAt, token.IPAddress, token.UserAgent).
+	query := `INSERT INTO security_tokens (user_id, token_type, token_hash, email, metadata, expires_at, ip_address, user_agent) 
+	          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, created_at`
+	
+	err := r.db.QueryRow(ctx, query, token.UserID, token.TokenType, token.TokenHash, token.Email, token.Metadata, token.ExpiresAt, token.IPAddress, token.UserAgent).
 		Scan(&token.ID, &token.CreatedAt)
 
 	if err != nil {
@@ -108,14 +108,14 @@ func (r *PostgresSecurityTokenRepository) Create(ctx context.Context, token *mod
 }
 
 func (r *PostgresSecurityTokenRepository) FindValidToken(ctx context.Context, tokenHash string, tokenType string) (*model.SecurityToken, error) {
-	query := `SELECT id, user_id, token_type, token_hash, expires_at, used_at, ip_address::text, user_agent, created_at 
+	query := `SELECT id, user_id, token_type, token_hash, expires_at, used_at, email, metadata, ip_address::text, user_agent, created_at 
 	          FROM security_tokens 
 	          WHERE token_hash = $1 AND token_type = $2 AND used_at IS NULL AND expires_at > now()`
 
 	var token model.SecurityToken
 	err := r.db.QueryRow(ctx, query, tokenHash, tokenType).Scan(
 		&token.ID, &token.UserID, &token.TokenType, &token.TokenHash, &token.ExpiresAt, &token.UsedAt,
-		&token.IPAddress, &token.UserAgent, &token.CreatedAt,
+		&token.Email, &token.Metadata, &token.IPAddress, &token.UserAgent, &token.CreatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

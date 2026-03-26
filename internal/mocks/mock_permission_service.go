@@ -85,3 +85,18 @@ func (mr *MockPermissionServiceMockRecorder) HasPermission(ctx, userID, tenantID
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasPermission", reflect.TypeOf((*MockPermissionService)(nil).HasPermission), ctx, userID, tenantID, required)
 }
+
+// HasRole mocks base method.
+func (m *MockPermissionService) HasRole(ctx context.Context, userID, tenantID, roleName string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasRole", ctx, userID, tenantID, roleName)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HasRole indicates an expected call of HasRole.
+func (mr *MockPermissionServiceMockRecorder) HasRole(ctx, userID, tenantID, roleName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasRole", reflect.TypeOf((*MockPermissionService)(nil).HasRole), ctx, userID, tenantID, roleName)
+}

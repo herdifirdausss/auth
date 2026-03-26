@@ -16,7 +16,7 @@ func TestHasPermission_Allowed(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{"users:read"}, nil)
@@ -31,7 +31,7 @@ func TestHasPermission_Denied(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{"users:read"}, nil)
@@ -46,7 +46,7 @@ func TestHasPermission_SuperAdmin(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{"*"}, nil)
@@ -61,7 +61,7 @@ func TestHasPermission_ResourceWildcard(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{"users:*"}, nil)
@@ -76,7 +76,7 @@ func TestHasPermission_Error(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return(nil, errors.New("db error"))
@@ -91,7 +91,7 @@ func TestGetUserPermissions_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{"users:read"}, nil)
@@ -106,7 +106,7 @@ func TestGetUserPermissions_NoRoles(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	mockRepo.EXPECT().FindPermissionsByUserAndTenant(ctx, "user1", "tenant1").Return([]string{}, nil)
@@ -121,7 +121,7 @@ func TestGetUserRoles_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockRepo := mocks.NewMockRoleRepository(ctrl)
-	svc := NewDefaultPermissionService(mockRepo)
+	svc := NewDefaultPermissionService(mockRepo, nil)
 
 	ctx := context.Background()
 	expectedRoles := []model.Role{{ID: "r1", Name: "Admin"}}

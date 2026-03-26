@@ -23,12 +23,20 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 
+	auditService := mocks.NewMockAuditService(ctrl)
+	auditService.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	membershipRepo := mocks.NewMockTenantMembershipRepository(ctrl)
 	s := &AuthServiceImpl{
-		userRepo:    userRepo,
-		tokenRepo:   tokenRepo,
-		eventRepo:   eventRepo,
-		rateLimiter: rateLimiter,
-		logger:      slog.Default(),
+		userRepo:       userRepo,
+		tokenRepo:      tokenRepo,
+		eventRepo:      eventRepo,
+		membershipRepo: membershipRepo,
+		rateLimiter:    rateLimiter,
+		auditService:   auditService,
+		riskService:      mocks.NewMockRiskService(ctrl),
+		pwnedValidator:  mocks.NewMockPwnedValidator(ctrl),
+		logger:         slog.Default(),
 	}
 
 	email := "test@example.com"
@@ -47,7 +55,8 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 		
 		userRepo.EXPECT().FindByEmail(gomock.Any(), email).Return(user, nil)
 		tokenRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
-		eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+		membershipRepo.EXPECT().FindActiveByUserID(gomock.Any(), "user-1").Return(nil, nil)
+		// eventRepo.Create is no longer called directly on success, it's via auditService (already mocked AnyTimes)
 
 		err := s.ForgotPassword(context.Background(), email, ip, ua)
 		assert.NoError(t, err)
@@ -86,7 +95,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		mockDB := mocks.NewMockTransactor(ctrl)
+		mockDB := mocks.NewMockPool(ctrl)
 		mockTx := mocks.NewMockTx(ctrl)
 
 		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
@@ -96,14 +105,29 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
 		hasher := mocks.NewMockPasswordHasher(ctrl)
 
+		auditService := mocks.NewMockAuditService(ctrl)
+		auditService.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+		userRepo := mocks.NewMockUserRepository(ctrl)
+		membershipRepo := mocks.NewMockTenantMembershipRepository(ctrl)
+		riskService := mocks.NewMockRiskService(ctrl)
+		pwnedValidator := mocks.NewMockPwnedValidator(ctrl)
+		
+		pwnedValidator.EXPECT().IsPwned(gomock.Any(), newPassword).Return(false, 0, nil).AnyTimes()
+
 		s := &AuthServiceImpl{
 			db:                  mockDB,
+			userRepo:            userRepo,
 			tokenRepo:           tokenRepo,
 			credRepo:            credRepo,
+			membershipRepo:      membershipRepo,
 			passwordHistoryRepo: historyRepo,
 			sessionRepo:         sessionRepo,
 			eventRepo:           eventRepo,
+			auditService:        auditService,
 			hasher:              hasher,
+			riskService:         riskService,
+			pwnedValidator:      pwnedValidator,
 			logger:              slog.Default(),
 		}
 
@@ -119,13 +143,15 @@ func TestAuthService_ResetPassword(t *testing.T) {
 
 		mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
 		credRepo.EXPECT().UpdatePassword(gomock.Any(), mockTx, "user-1", "new-hash", "new-salt").Return(nil)
+		userRepo.EXPECT().UpdatePasswordChangedAt(gomock.Any(), mockTx, "user-1").Return(nil)
 		historyRepo.EXPECT().Create(gomock.Any(), mockTx, "user-1", "new-hash", "new-salt").Return(nil)
 		historyRepo.EXPECT().Cleanup(gomock.Any(), "user-1", 5).Return(nil)
 		tokenRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "token-1").Return(nil)
+		membershipRepo.EXPECT().FindActiveByUserID(gomock.Any(), "user-1").Return(nil, nil)
 		sessionRepo.EXPECT().RevokeAllByUser(gomock.Any(), mockTx, "user-1", "password_reset").Return(nil)
 		mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 		mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
-		eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+		// eventRepo.Create is no longer called directly on success
 
 		err := s.ResetPassword(context.Background(), rawToken, newPassword, "127.0.0.1", "ua")
 		assert.NoError(t, err)
@@ -135,8 +161,13 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		auditService := mocks.NewMockAuditService(ctrl) // Add auditService mock
 		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
-		s := &AuthServiceImpl{tokenRepo: tokenRepo, logger: slog.Default()}
+		s := &AuthServiceImpl{tokenRepo: tokenRepo, hasher: mocks.NewMockPasswordHasher(ctrl), 			auditService:   auditService,
+			riskService:    mocks.NewMockRiskService(ctrl),
+			pwnedValidator: mocks.NewMockPwnedValidator(ctrl),
+			logger:         slog.Default(),
+		}
 
 		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(nil, nil)
 
@@ -149,8 +180,13 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
+		auditService := mocks.NewMockAuditService(ctrl)
 		tokenRepo := mocks.NewMockSecurityTokenRepository(ctrl)
-		s := &AuthServiceImpl{tokenRepo: tokenRepo, logger: slog.Default()}
+		s := &AuthServiceImpl{tokenRepo: tokenRepo, hasher: mocks.NewMockPasswordHasher(ctrl), 			auditService:   auditService,
+			riskService:    mocks.NewMockRiskService(ctrl),
+			pwnedValidator: mocks.NewMockPwnedValidator(ctrl),
+			logger:         slog.Default(),
+		}
 
 		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
 		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(token, nil)
@@ -168,15 +204,26 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		historyRepo := mocks.NewMockPasswordHistoryRepository(ctrl)
 		hasher := mocks.NewMockPasswordHasher(ctrl)
 
+		auditService := mocks.NewMockAuditService(ctrl)
 		s := &AuthServiceImpl{
 			tokenRepo:           tokenRepo,
 			passwordHistoryRepo: historyRepo,
 			hasher:              hasher,
+			auditService:        auditService,
+			riskService:         mocks.NewMockRiskService(ctrl),
+			pwnedValidator:      mocks.NewMockPwnedValidator(ctrl),
 			logger:              slog.Default(),
 		}
+		// db was missing but ResetPassword might reach it if earlier checks pass.
+		// However, RecentlyUsedPassword should fail at hasher.Verify or before.
+		// Let's add db just in case.
+		s.db = mocks.NewMockPool(ctrl)
 
 		token := &model.SecurityToken{ID: "token-1", UserID: "user-1"}
 		tokenRepo.EXPECT().FindValidToken(gomock.Any(), tokenHash, "password_reset").Return(token, nil)
+		pwnedValidator := s.pwnedValidator.(*mocks.MockPwnedValidator)
+		pwnedValidator.EXPECT().IsPwned(gomock.Any(), newPassword).Return(false, 0, nil).AnyTimes()
+
 		historyRepo.EXPECT().GetRecentPasswords(gomock.Any(), "user-1", 5).Return([]*model.UserPasswordHistory{{PasswordHash: "old-hash", PasswordSalt: "old-salt"}}, nil)
 		hasher.EXPECT().Verify(newPassword, "old-hash", "old-salt").Return(true, nil)
 

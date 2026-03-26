@@ -55,11 +55,13 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 				return
 			}
 			session = &redis.CachedSession{
-				SessionID:     dbSession.ID,
-				UserID:        dbSession.UserID,
-				MFAVerified:   dbSession.MFAVerified,
-				ExpiresAt:     dbSession.ExpiresAt,
-				IdleTimeoutAt: dbSession.IdleTimeoutAt,
+				SessionID:         dbSession.ID,
+				UserID:            dbSession.UserID,
+				TokenHash:         dbSession.TokenHash,
+				DeviceFingerprint: dbSession.DeviceFingerprint,
+				MFAVerified:       dbSession.MFAVerified,
+				ExpiresAt:         dbSession.ExpiresAt,
+				IdleTimeoutAt:     dbSession.IdleTimeoutAt,
 			}
 			if dbSession.TenantID != nil {
 				session.TenantID = *dbSession.TenantID
@@ -68,7 +70,14 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			m.sessionCache.Set(r.Context(), claims.Sid, session)
 		}
 
-		// 6. Validate JWT claims against Session
+		// 6. Validate Device Fingerprint
+		clientFingerprint := r.Header.Get("X-Device-Fingerprint")
+		if session.DeviceFingerprint != "" && session.DeviceFingerprint != clientFingerprint {
+			writeUnauthorized(w, "Session binding violation: mismatched device")
+			return
+		}
+
+		// 7. Validate JWT claims against Session
 		if claims.Sid != session.SessionID {
 			writeUnauthorized(w, "Invalid session token")
 			return
@@ -104,7 +113,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			UserID:      session.UserID,
 			SessionID:   session.SessionID,
 			MFAVerified: session.MFAVerified,
-			TokenHash:   "", // No longer using tokenHash for basic auth
+			TokenHash:   session.TokenHash,
 			TenantID:    session.TenantID,
 		}
 

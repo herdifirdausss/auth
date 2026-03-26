@@ -101,6 +101,21 @@ func (mr *MockUserRepositoryMockRecorder) FindByEmail(ctx, email any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByEmail", reflect.TypeOf((*MockUserRepository)(nil).FindByEmail), ctx, email)
 }
 
+// FindByID mocks base method.
+func (m *MockUserRepository) FindByID(ctx context.Context, id string) (*model.User, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByID", ctx, id)
+	ret0, _ := ret[0].(*model.User)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByID indicates an expected call of FindByID.
+func (mr *MockUserRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockUserRepository)(nil).FindByID), ctx, id)
+}
+
 // IncrementFailedLogin mocks base method.
 func (m *MockUserRepository) IncrementFailedLogin(ctx context.Context, userID string) (int, error) {
 	m.ctrl.T.Helper()
@@ -116,18 +131,18 @@ func (mr *MockUserRepositoryMockRecorder) IncrementFailedLogin(ctx, userID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementFailedLogin", reflect.TypeOf((*MockUserRepository)(nil).IncrementFailedLogin), ctx, userID)
 }
 
-// ResetFailedLoginAndUpdateLastLogin mocks base method.
-func (m *MockUserRepository) ResetFailedLoginAndUpdateLastLogin(ctx context.Context, userID, ip string) error {
+// ResetFailedLogin mocks base method.
+func (m *MockUserRepository) ResetFailedLogin(ctx context.Context, userID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetFailedLoginAndUpdateLastLogin", ctx, userID, ip)
+	ret := m.ctrl.Call(m, "ResetFailedLogin", ctx, userID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// ResetFailedLoginAndUpdateLastLogin indicates an expected call of ResetFailedLoginAndUpdateLastLogin.
-func (mr *MockUserRepositoryMockRecorder) ResetFailedLoginAndUpdateLastLogin(ctx, userID, ip any) *gomock.Call {
+// ResetFailedLogin indicates an expected call of ResetFailedLogin.
+func (mr *MockUserRepositoryMockRecorder) ResetFailedLogin(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetFailedLoginAndUpdateLastLogin", reflect.TypeOf((*MockUserRepository)(nil).ResetFailedLoginAndUpdateLastLogin), ctx, userID, ip)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetFailedLogin", reflect.TypeOf((*MockUserRepository)(nil).ResetFailedLogin), ctx, userID)
 }
 
 // SetVerified mocks base method.
@@ -144,16 +159,58 @@ func (mr *MockUserRepositoryMockRecorder) SetVerified(ctx, tx, userID any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetVerified", reflect.TypeOf((*MockUserRepository)(nil).SetVerified), ctx, tx, userID)
 }
 
-// SuspendUser mocks base method.
-func (m *MockUserRepository) SuspendUser(ctx context.Context, userID string) error {
+// SoftDelete mocks base method.
+func (m *MockUserRepository) SoftDelete(ctx context.Context, userID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SuspendUser", ctx, userID)
+	ret := m.ctrl.Call(m, "SoftDelete", ctx, userID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// SuspendUser indicates an expected call of SuspendUser.
-func (mr *MockUserRepositoryMockRecorder) SuspendUser(ctx, userID any) *gomock.Call {
+// SoftDelete indicates an expected call of SoftDelete.
+func (mr *MockUserRepositoryMockRecorder) SoftDelete(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuspendUser", reflect.TypeOf((*MockUserRepository)(nil).SuspendUser), ctx, userID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDelete", reflect.TypeOf((*MockUserRepository)(nil).SoftDelete), ctx, userID)
+}
+
+// Suspend mocks base method.
+func (m *MockUserRepository) Suspend(ctx context.Context, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Suspend", ctx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Suspend indicates an expected call of Suspend.
+func (mr *MockUserRepositoryMockRecorder) Suspend(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Suspend", reflect.TypeOf((*MockUserRepository)(nil).Suspend), ctx, userID)
+}
+
+// UpdateLastLogin mocks base method.
+func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, userID, ip string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastLogin", ctx, userID, ip)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateLastLogin indicates an expected call of UpdateLastLogin.
+func (mr *MockUserRepositoryMockRecorder) UpdateLastLogin(ctx, userID, ip any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastLogin", reflect.TypeOf((*MockUserRepository)(nil).UpdateLastLogin), ctx, userID, ip)
+}
+
+// UpdatePasswordChangedAt mocks base method.
+func (m *MockUserRepository) UpdatePasswordChangedAt(ctx context.Context, tx pgx.Tx, userID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePasswordChangedAt", ctx, tx, userID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdatePasswordChangedAt indicates an expected call of UpdatePasswordChangedAt.
+func (mr *MockUserRepositoryMockRecorder) UpdatePasswordChangedAt(ctx, tx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePasswordChangedAt", reflect.TypeOf((*MockUserRepository)(nil).UpdatePasswordChangedAt), ctx, tx, userID)
 }

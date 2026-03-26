@@ -15,6 +15,8 @@ type SessionCache interface {
 	Get(ctx context.Context, tokenHash string) (*CachedSession, error)
 	Delete(ctx context.Context, userID, tokenHash string) error
 	DeleteByUserID(ctx context.Context, userID string) error
+	SetRaw(ctx context.Context, key string, data string, ttl time.Duration) error
+	GetRaw(ctx context.Context, key string) (string, error)
 }
 
 type RedisSessionCache struct {
@@ -30,12 +32,14 @@ func NewSessionCache(client *redis.Client, ttl time.Duration) SessionCache {
 }
 
 type CachedSession struct {
-	SessionID     string    `json:"session_id"`
-	UserID        string    `json:"user_id"`
-	TenantID      string    `json:"tenant_id"`
-	MFAVerified   bool      `json:"mfa_verified"`
-	ExpiresAt     time.Time `json:"expires_at"`
-	IdleTimeoutAt time.Time `json:"idle_timeout_at"`
+	SessionID         string    `json:"session_id"`
+	UserID            string    `json:"user_id"`
+	TenantID          string    `json:"tenant_id"`
+	TokenHash         string    `json:"token_hash"`
+	DeviceFingerprint string    `json:"device_fingerprint"`
+	MFAVerified       bool      `json:"mfa_verified"`
+	ExpiresAt         time.Time `json:"expires_at"`
+	IdleTimeoutAt     time.Time `json:"idle_timeout_at"`
 }
 
 func (s *RedisSessionCache) Set(ctx context.Context, tokenHash string, session *CachedSession) error {
@@ -107,4 +111,11 @@ func (s *RedisSessionCache) DeleteByUserID(ctx context.Context, userID string) e
 	
 	_, err = pipe.Exec(ctx)
 	return err
+}
+func (s *RedisSessionCache) SetRaw(ctx context.Context, key string, data string, ttl time.Duration) error {
+	return s.client.Set(ctx, key, data, ttl).Err()
+}
+
+func (s *RedisSessionCache) GetRaw(ctx context.Context, key string) (string, error) {
+	return s.client.Get(ctx, key).Result()
 }

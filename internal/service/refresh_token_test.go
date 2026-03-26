@@ -17,7 +17,7 @@ func TestRefreshToken_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := mocks.NewMockTransactor(ctrl)
+	mockDB := mocks.NewMockPool(ctrl)
 	mockTx := mocks.NewMockTx(ctrl)
 
 	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
@@ -33,7 +33,9 @@ func TestRefreshToken_Success(t *testing.T) {
 			SecretKey: []byte("test"),
 			AccessExpiry: 15 * time.Minute,
 		},
-		logger: slog.Default(),
+		riskService:      mocks.NewMockRiskService(ctrl),
+		pwnedValidator:   mocks.NewMockPwnedValidator(ctrl),
+		logger:           slog.Default(),
 	}
 
 	rawRefresh := "old-refresh-token"
@@ -49,16 +51,18 @@ func TestRefreshToken_Success(t *testing.T) {
 	}
 
 	rfRepo.EXPECT().FindByTokenHash(gomock.Any(), refreshHash).Return(token, nil)
-	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1"}, nil)
+	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1", DeviceFingerprint: ""}, nil)
 	
 	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
 	rfRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "rt-1").Return(nil)
 	rfRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
-	sessRepo.EXPECT().UpdateActivity(gomock.Any(), "sess-1").Return(nil)
+	sessRepo.EXPECT().UpdateTokenHash(gomock.Any(), mockTx, "sess-1", gomock.Any()).Return(nil)
 	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	res, err := s.RefreshToken(context.Background(), rawRefresh, "1.1.1.1", "ua")
+	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1", DeviceFingerprint: ""}, nil)
+
+	res, err := s.RefreshToken(context.Background(), &model.RefreshTokenRequest{RefreshToken: rawRefresh}, "1.1.1.1", "ua")
 	
 	assert.NoError(t, err)
 	assert.NotEmpty(t, res.AccessToken)
@@ -69,7 +73,7 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := mocks.NewMockTransactor(ctrl)
+	mockDB := mocks.NewMockPool(ctrl)
 	mockTx := mocks.NewMockTx(ctrl)
 
 	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
@@ -81,7 +85,9 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
 		eventRepo: eventRepo,
-		logger: slog.Default(),
+		riskService:      mocks.NewMockRiskService(ctrl),
+		pwnedValidator:   mocks.NewMockPwnedValidator(ctrl),
+		logger:           slog.Default(),
 	}
 
 	rawRefresh := "reused-token"
@@ -98,6 +104,7 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 	}
 
 	rfRepo.EXPECT().FindByTokenHash(gomock.Any(), refreshHash).Return(token, nil)
+	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1"}, nil)
 	eventRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
 	
 	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
@@ -106,7 +113,7 @@ func TestRefreshToken_ReuseDetection(t *testing.T) {
 	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
-	_, err := s.RefreshToken(context.Background(), rawRefresh, "1.1.1.1", "ua")
+	_, err := s.RefreshToken(context.Background(), &model.RefreshTokenRequest{RefreshToken: rawRefresh}, "1.1.1.1", "ua")
 	
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "suspicious activity")
@@ -115,7 +122,7 @@ func TestRefreshToken_SessionRevoked_TOCTOU(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	mockDB := mocks.NewMockTransactor(ctrl)
+	mockDB := mocks.NewMockPool(ctrl)
 	mockTx := mocks.NewMockTx(ctrl)
 
 	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
@@ -125,7 +132,9 @@ func TestRefreshToken_SessionRevoked_TOCTOU(t *testing.T) {
 		db: mockDB,
 		refreshTokenRepo: rfRepo,
 		sessionRepo: sessRepo,
-		logger: slog.Default(),
+		riskService:      mocks.NewMockRiskService(ctrl),
+		pwnedValidator:   mocks.NewMockPwnedValidator(ctrl),
+		logger:           slog.Default(),
 	}
 
 	rawRefresh := "valid-token"
@@ -139,18 +148,15 @@ func TestRefreshToken_SessionRevoked_TOCTOU(t *testing.T) {
 	}
 
 	rfRepo.EXPECT().FindByTokenHash(gomock.Any(), refreshHash).Return(token, nil)
+	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", UserID: "user-1"}, nil)
 	
 	mockDB.EXPECT().Begin(gomock.Any()).Return(mockTx, nil)
-	rfRepo.EXPECT().MarkUsed(gomock.Any(), mockTx, "rt-1").Return(nil)
-	rfRepo.EXPECT().Create(gomock.Any(), mockTx, gomock.Any()).Return(nil)
-	sessRepo.EXPECT().UpdateActivity(gomock.Any(), "sess-1").Return(nil)
-	mockTx.EXPECT().Commit(gomock.Any()).Return(nil)
 	mockTx.EXPECT().Rollback(gomock.Any()).Return(nil).AnyTimes()
 
 	// Simulation: Session is revoked just before generating JWT
 	sessRepo.EXPECT().FindByID(gomock.Any(), "sess-1").Return(&model.Session{ID: "sess-1", RevokedAt: &[]time.Time{time.Now()}[0]}, nil)
 
-	_, err := s.RefreshToken(context.Background(), rawRefresh, "1.1.1.1", "ua")
+	_, err := s.RefreshToken(context.Background(), &model.RefreshTokenRequest{RefreshToken: rawRefresh}, "1.1.1.1", "ua")
 	
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "session revoked")

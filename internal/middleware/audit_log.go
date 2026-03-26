@@ -7,6 +7,7 @@ import (
 
 	"github.com/herdifirdausss/auth/internal/model"
 	"github.com/herdifirdausss/auth/internal/repository"
+	"github.com/herdifirdausss/auth/internal/utils"
 )
 
 // AuditLog is a middleware that logs sensitive actions (POST/PUT/DELETE to auth/admin endpoints).
@@ -27,10 +28,10 @@ func AuditLog(auditRepo repository.AuditLogRepository) func(http.Handler) http.H
 				// or strictly auth/admin. The req says auth/admin.
 			}
 
-			var userID string
+			var userID *string
 			authCtx, err := GetAuthContext(r.Context())
-			if err == nil && authCtx != nil {
-				userID = authCtx.UserID
+			if err == nil && authCtx != nil && authCtx.UserID != "" {
+				userID = utils.Ptr(authCtx.UserID)
 			}
 
 			// Capture IP
@@ -43,7 +44,7 @@ func AuditLog(auditRepo repository.AuditLogRepository) func(http.Handler) http.H
 				UserID:       userID,
 				Action:       r.Method,
 				ResourceType: r.URL.Path,
-				ResourceID:   "",
+				ResourceID:   nil,
 				IPAddress:    ip,
 				UserAgent:    r.UserAgent(),
 				CreatedAt:    time.Now(),

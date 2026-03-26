@@ -25,15 +25,24 @@ fi
 # 2. Reset environment
 echo -e "Resetting environment..."
 rm -f "$LOG_FILE" cookies.txt
+go run scripts/reset_db/main.go
 redis-cli flushdb > /dev/null 2>&1 || echo -e "${YELLOW}[WARN]${NC} Redis not reachable or flushdb failed"
 
 # 3. Start server
-echo -e "Starting server with MFA_TEST_MODE=true..."
+echo -e "Starting server with MFA_TEST_MODE=true and WebAuthn config..."
 export MFA_TEST_MODE=true
+export WEBAUTHN_RP_ID=localhost
+export WEBAUTHN_RP_ORIGIN=http://localhost:8080
+export DATABASE_URL=${DATABASE_URL:-"postgres://postgres:postgres@localhost:5432/auth_db?sslmode=disable"}
+
 # Use grep to export .env vars if file exists
 if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
+
+# 3. Seed roles if database was truncated
+echo "Seeding system roles..."
+go run scripts/seed_roles/main.go
 
 nohup go run . > "$LOG_FILE" 2>&1 &
 SERVER_PID=$!
@@ -62,7 +71,7 @@ echo -e "${GREEN}[SUCCESS]${NC} Server is up and running."
 
 # 5. Run tests
 echo -e "Running integration tests..."
-./test_integration.sh "http://localhost:$PORT"
+./scripts/test_integration.sh "http://localhost:$PORT"
 TEST_RESULT=$?
 
 # 6. Cleanup

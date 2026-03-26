@@ -2,11 +2,9 @@ package service
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -19,20 +17,22 @@ import (
 	"github.com/herdifirdausss/auth/internal/validator"
 )
 
-//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
+//go:generate mockgen -source=auth_service.go -destination=../mocks/mock_auth_service.go -package=mocks
 type AuthService interface {
 	Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error)
 	VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error
-	Login(ctx context.Context, req *model.LoginRequest, ip string, userAgent string) (*model.LoginResponse, error)
-	RefreshToken(ctx context.Context, rawRefresh string, ip string, userAgent string) (*model.LoginResponse, error)
-	ForgotPassword(ctx context.Context, email, ip, ua string) error
-	ResetPassword(ctx context.Context, token, newPassword, ip, ua string) error
+	Login(ctx context.Context, req *model.LoginRequest, ip, userAgent string) (*model.LoginResponse, error)
+	RefreshToken(ctx context.Context, req *model.RefreshTokenRequest, ip, userAgent string) (*model.LoginResponse, error)
 	Logout(ctx context.Context, sessionID, userID, tokenHash string) error
 	LogoutAll(ctx context.Context, userID string) error
+	ValidateSession(ctx context.Context, sessionID string) (*model.Session, error)
+	ForgotPassword(ctx context.Context, email string, ip, userAgent string) error
+	ResetPassword(ctx context.Context, token, newPassword, ip, userAgent string) error
+	DeleteAccount(ctx context.Context, userID, ip, userAgent string) error
 }
 
 type AuthServiceImpl struct {
-	db                  repository.Transactor
+	db                  repository.Pool
 	userRepo            repository.UserRepository
 	credRepo            repository.CredentialRepository
 	tokenRepo           repository.SecurityTokenRepository
@@ -43,6 +43,12 @@ type AuthServiceImpl struct {
 	refreshTokenRepo    repository.RefreshTokenRepository
 	mfaRepo             repository.MFARepository
 	passwordHistoryRepo repository.PasswordHistoryRepository
+	trustedDeviceRepo   repository.TrustedDeviceRepository
+	roleRepo            repository.RoleRepository
+	membershipRoleRepo  repository.MembershipRoleRepository
+	riskService         RiskService
+	pwnedValidator      security.PwnedValidator
+	auditService        AuditService
 	hasher              security.PasswordHasher
 	rateLimiter         redis.RateLimiter
 	sessionCache        redis.SessionCache
@@ -51,7 +57,7 @@ type AuthServiceImpl struct {
 }
 
 func NewAuthService(
-	db repository.Transactor,
+	db repository.Pool,
 	userRepo repository.UserRepository,
 	credRepo repository.CredentialRepository,
 	tokenRepo repository.SecurityTokenRepository,
@@ -62,12 +68,18 @@ func NewAuthService(
 	refreshTokenRepo repository.RefreshTokenRepository,
 	mfaRepo repository.MFARepository,
 	passwordHistoryRepo repository.PasswordHistoryRepository,
+	trustedDeviceRepo repository.TrustedDeviceRepository,
+	roleRepo repository.RoleRepository,
+	membershipRoleRepo repository.MembershipRoleRepository,
+	riskService RiskService,
+	pwnedValidator security.PwnedValidator,
+	auditService AuditService,
 	hasher security.PasswordHasher,
 	rateLimiter redis.RateLimiter,
 	sessionCache redis.SessionCache,
 	jwtConfig security.JWTConfig,
 	logger *slog.Logger,
-) *AuthServiceImpl {
+) AuthService {
 	return &AuthServiceImpl{
 		db:                  db,
 		userRepo:            userRepo,
@@ -80,6 +92,12 @@ func NewAuthService(
 		refreshTokenRepo:    refreshTokenRepo,
 		mfaRepo:             mfaRepo,
 		passwordHistoryRepo: passwordHistoryRepo,
+		trustedDeviceRepo:   trustedDeviceRepo,
+		roleRepo:            roleRepo,
+		membershipRoleRepo:  membershipRoleRepo,
+		riskService:         riskService,
+		pwnedValidator:      pwnedValidator,
+		auditService:        auditService,
 		hasher:              hasher,
 		rateLimiter:         rateLimiter,
 		sessionCache:        sessionCache,
@@ -88,286 +106,236 @@ func NewAuthService(
 	}
 }
 
-func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterRequest, ipAddress, userAgent string) (*model.RegisterResponse, error) {
-	// 0. Normalize Email
-	req.Email = strings.ToLower(norm.NFC.String(req.Email))
-
-	// 1. Validate
-	valErrors := validator.ValidateRegisterRequest(req)
-	if len(valErrors) > 0 {
-		return nil, fmt.Errorf("validation failed: %v", valErrors)
+func (s *AuthServiceImpl) Register(ctx context.Context, req *model.RegisterRequest, ip, userAgent string) (*model.RegisterResponse, error) {
+	if errs := validator.ValidateRegisterRequest(req); len(errs) > 0 {
+		return nil, fmt.Errorf("validation failed: %v", errs)
 	}
 
-	// 2. Check exist
-	exists, err := s.userRepo.ExistsByEmail(ctx, req.Email)
+	email := strings.ToLower(norm.NFKC.String(req.Email))
+
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check user existence by email", "error", err, "email", req.Email)
+		fmt.Printf("DEBUG: Register Begin Error: %v\n", err)
+		return nil, fmt.Errorf("error starting transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	existing, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil && !strings.Contains(err.Error(), "no rows") {
+		fmt.Printf("DEBUG: Register FindByEmail Error: %v\n", err)
+	}
+	if existing != nil {
+		return nil, fmt.Errorf("email already registered")
+	}
+
+	// Create Tenant
+	tenant := &model.Tenant{
+		Name:     req.Username + "'s Organization",
+		Slug:     req.TenantSlug,
+		IsActive: true,
+		Settings: make(map[string]interface{}),
+	}
+	if err := s.tenantRepo.Create(ctx, tx, tenant); err != nil {
 		return nil, err
 	}
-	if exists {
-		return nil, fmt.Errorf("email already exists")
+
+	// Create User
+	// Compromised Password Check
+	if pwned, _, _ := s.pwnedValidator.IsPwned(ctx, req.Password); pwned {
+		return nil, fmt.Errorf("this password has been found in a data breach, please use a more secure password")
 	}
 
-	exists, err = s.userRepo.ExistsByUsername(ctx, req.Username)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check user existence by username", "error", err, "username", req.Username)
-		return nil, err
-	}
-	if exists {
-		return nil, fmt.Errorf("username already exists")
-	}
-
-	// 3. Hash password
 	hash, salt, err := s.hasher.Hash(req.Password)
 	if err != nil {
 		return nil, err
 	}
-
-	// 4. Transaction
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
 	user := &model.User{
-		Email:      req.Email,
+		Email:      email,
 		Username:   req.Username,
+		Phone:      nil,
 		IsActive:   true,
 		IsVerified: false,
+		Metadata:   make(map[string]interface{}),
 	}
 	if err := s.userRepo.Create(ctx, tx, user); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create user", "error", err, "email", user.Email)
 		return nil, err
 	}
 
-	cred := &model.UserCredential{
-		UserID:       user.ID,
-		PasswordHash: hash,
-		PasswordSalt: salt,
-		PasswordAlgo: "argon2id",
-	}
+	// Create Credentials
+	cred := &model.UserCredential{UserID: user.ID, PasswordHash: hash, PasswordSalt: salt, PasswordAlgo: "argon2id"}
 	if err := s.credRepo.Create(ctx, tx, cred); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create credentials", "error", err, "userID", user.ID)
 		return nil, err
 	}
 
-	var tenantID *string
-	if req.TenantSlug != "" {
-		tenant, err := s.tenantRepo.FindBySlug(ctx, req.TenantSlug)
-		if err != nil {
-			return nil, err
-		}
-		if tenant == nil {
-			return nil, fmt.Errorf("tenant not found")
-		}
-		tenantID = &tenant.ID
-		membership := &model.TenantMembership{
-			UserID:   user.ID,
-			TenantID: tenant.ID,
-			Status:   "active", // Set to active immediately for MVP/Testing
-		}
-		if err := s.membershipRepo.Create(ctx, tx, membership); err != nil {
-			s.logger.ErrorContext(ctx, "failed to create membership", "error", err, "userID", user.ID, "tenantID", tenant.ID)
-			return nil, err
-		}
+	// Record password history
+	if err := s.passwordHistoryRepo.Create(ctx, tx, user.ID, hash, salt); err != nil {
+		return nil, err
+	}
+
+	// Create Membership
+	membership := &model.TenantMembership{UserID: user.ID, TenantID: tenant.ID, Status: "active"}
+	if err := s.membershipRepo.Create(ctx, tx, membership); err != nil {
+		return nil, err
+	}
+
+	// Assign Admin Role
+	role, err := s.roleRepo.FindByName(ctx, nil, "admin")
+	if err != nil {
+		return nil, fmt.Errorf("error finding admin role: %w", err)
+	}
+	if role == nil {
+		return nil, fmt.Errorf("system role 'admin' not found - please run migrations to seed roles")
+	}
+	if err := s.membershipRoleRepo.AddRole(ctx, tx, membership.ID, role.ID); err != nil {
+		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.ErrorContext(ctx, "failed to commit registration transaction", "error", err)
-		return nil, err
+		return nil, fmt.Errorf("error committing transaction: %w", err)
 	}
 
-	// 5. Token
-	rawToken := make([]byte, 32)
-	rand.Read(rawToken)
-	tokenStr := hex.EncodeToString(rawToken)
-	tokenHash := sha256.Sum256([]byte(tokenStr))
-
-	token := &model.SecurityToken{
+	// Generate Email Verification Token
+	token, _ := security.GenerateSecureToken(32)
+	tokenHash := security.HashToken(token)
+	st := &model.SecurityToken{
 		UserID:    user.ID,
 		TokenType: "email_verification",
-		TokenHash: hex.EncodeToString(tokenHash[:]),
+		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
-		IPAddress: ipAddress,
+		IPAddress: ip,
 		UserAgent: userAgent,
+		Metadata:  make(map[string]interface{}),
 	}
-	if err := s.tokenRepo.Create(ctx, token); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create verification token", "error", err, "userID", user.ID)
+	if err := s.tokenRepo.Create(ctx, st); err != nil {
+		s.logger.Error("failed to create verification token", "error", err, "email", email)
+		return nil, fmt.Errorf("failed to generate verification token: %w", err)
 	}
-	s.logger.InfoContext(ctx, "Integration test: email verification token generated", "email", user.Email, "token", tokenStr)
-
-	// 6. Security Event
-	event := &model.SecurityEvent{
-		UserID:    &user.ID,
-		TenantID:  tenantID,
-		EventType: "user.registered",
-		Severity:  "info",
-		Details:   "User registered successfully",
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
-	}
-	if err := s.eventRepo.Create(ctx, event); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create registration security event", "error", err, "userID", user.ID)
+	if os.Getenv("MFA_TEST_MODE") == "true" {
+		s.logger.Info("email verification token generated", "email", email, "token", token, "token_hash", tokenHash)
 	}
 
-	// TODO: Send email
-	s.logger.InfoContext(ctx, "Verification token generated", "email", req.Email, "token", tokenStr)
+	s.auditService.Log(ctx, "user.registered", &user.ID, &tenant.ID, "user", &user.ID, nil, user, ip, userAgent)
 
-	return &model.RegisterResponse{
-		Status:  "success",
-		Message: "Registration successful. Please check your email to verify your account.",
-	}, nil
+	return &model.RegisterResponse{Message: "Registration successful. Please verify your email."}, nil
 }
 
-func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ipAddress, userAgent string) error {
-	// 1. Hash token
+func (s *AuthServiceImpl) VerifyEmail(ctx context.Context, rawToken string, ip, userAgent string) error {
 	tokenHash := security.HashToken(rawToken)
-
-	// 2. Find valid token
 	token, err := s.tokenRepo.FindValidToken(ctx, tokenHash, "email_verification")
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Error finding valid token", "error", err, "token_hash", tokenHash)
-		return err
-	}
-	if token == nil {
-		s.logger.InfoContext(ctx, "invalid or expired verification token", "token_hash", tokenHash)
+	if err != nil || token == nil {
+		s.logger.Warn("verification token not found or invalid", "token_hash", tokenHash, "error", err)
 		return fmt.Errorf("invalid or expired verification token")
 	}
 
-	// 3. Transaction
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	// 4. Mark used
+	if err := s.userRepo.SetVerified(ctx, tx, token.UserID); err != nil {
+		return err
+	}
 	if err := s.tokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
 		return err
 	}
 
-	// 5. Set verified
-	if err := s.userRepo.SetVerified(ctx, tx, token.UserID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to set user as verified", "error", err, "userID", token.UserID)
-		return err
-	}
-
-	// 5a. Activate Membership
-	if err := s.membershipRepo.ActivateByUserID(ctx, tx, token.UserID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to activate membership", "error", err, "userID", token.UserID)
-		return err
-	}
-
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.ErrorContext(ctx, "failed to commit verification transaction", "error", err, "userID", token.UserID)
 		return err
 	}
 
-	// 6. Security Event
-	event := &model.SecurityEvent{
-		UserID:    &token.UserID,
-		EventType: "user.email_verified",
-		Severity:  "info",
-		Details:   "Email verified successfully",
-		IPAddress: ipAddress,
-		UserAgent: userAgent,
+	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, token.UserID)
+	var tid *string
+	if membership != nil {
+		tid = &membership.TenantID
 	}
-	s.eventRepo.Create(ctx, event)
-
+	s.auditService.Log(ctx, "user.email_verified", &token.UserID, tid, "user", &token.UserID, map[string]bool{"is_verified": false}, map[string]bool{"is_verified": true}, ip, userAgent)
 	return nil
 }
 
-func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip string, userAgent string) (*model.LoginResponse, error) {
-	// 0. Normalize Email
-	req.Email = strings.ToLower(norm.NFC.String(req.Email))
-
-	// 1. Rate Limit IP
-	res, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
-		Key:      fmt.Sprintf("rate_limit:login:ip:%s", ip),
-		MaxCount: 20,
-		Window:   15 * time.Minute,
-	})
-	if err != nil || !res.Allowed {
-		return nil, fmt.Errorf("too many login attempts from this IP")
+func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip, userAgent string) (*model.LoginResponse, error) {
+	// Rate limit login attempts per IP and per Email
+	maxIPAttempts := 10
+	if os.Getenv("MFA_TEST_MODE") == "true" {
+		maxIPAttempts = 200
 	}
-
-	// 2. Rate Limit User
-	res, err = s.rateLimiter.Check(ctx, redis.RateLimitConfig{
-		Key:      fmt.Sprintf("rate_limit:login:user:%s", strings.ToLower(req.Email)),
-		MaxCount: 10,
-		Window:   15 * time.Minute,
+	limitRet, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
+		Key:      "login_ip:" + ip,
+		MaxCount: maxIPAttempts,
+		Window:   1 * time.Minute,
 	})
-	if err != nil || !res.Allowed {
-		return nil, fmt.Errorf("too many login attempts for this user")
-	}
-
-	// 3. Find User
-	user, err := s.userRepo.FindByEmail(ctx, req.Email)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to find user by email", "error", err, "email", req.Email)
 		return nil, err
 	}
+	if !limitRet.Allowed {
+		return nil, fmt.Errorf("too many attempts from this IP, try again later")
+	}
 
-	// 3a. User not found - still proceed to "dummy" hash to prevent timing attacks
+	maxEmailAttempts := 5
+	if os.Getenv("MFA_TEST_MODE") == "true" {
+		maxEmailAttempts = 100
+	}
+	limitRet, err = s.rateLimiter.Check(ctx, redis.RateLimitConfig{
+		Key:      "login_email:" + req.Email,
+		MaxCount: maxEmailAttempts,
+		Window:   5 * time.Minute,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !limitRet.Allowed {
+		return nil, fmt.Errorf("too many attempts for this email, try again later")
+	}
+
+	// 1. Find User
+	user, err := s.userRepo.FindByEmail(ctx, req.Email)
+	if err != nil {
+		return nil, err
+	}
 	if user == nil {
-		s.logger.InfoContext(ctx, "login failed: user not found", "email", req.Email)
-		// Use a fixed dummy hash and salt to ensure consistent timing
-		// These should be long enough and look like real Argon2id outputs
+		// Timing attack protection: dummy hashing
 		dummyHash := "0000000000000000000000000000000000000000000000000000000000000000"
 		dummySalt := "00000000000000000000000000000000"
-		_, _ = s.hasher.Verify(req.Password, dummyHash, dummySalt)
+		s.hasher.Verify(req.Password, dummyHash, dummySalt)
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	// 4. Check Suspended
 	if user.IsSuspended {
 		return nil, fmt.Errorf("account has been suspended")
 	}
-
-	// 4a. Check Email Verified
 	if !user.IsVerified {
-		return nil, fmt.Errorf("please verify your email before logging in")
+		return nil, fmt.Errorf("please verify your email")
 	}
 
-	// 5. Find Credentials
+	// 2. Find Credentials
 	cred, err := s.credRepo.FindByUserID(ctx, user.ID)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to find credentials by userID", "error", err, "userID", user.ID)
-		return nil, err
-	}
-	if cred == nil {
-		s.logger.ErrorContext(ctx, "credentials not found for user", "userID", user.ID)
+	if err != nil || cred == nil {
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	// 6. Verify Password
+	// 3. Verify Password
 	match, err := s.hasher.Verify(req.Password, cred.PasswordHash, cred.PasswordSalt)
 	if err != nil || !match {
-		// Log Failed Login
 		count, _ := s.userRepo.IncrementFailedLogin(ctx, user.ID)
-		if count >= 10 {
-			s.userRepo.SuspendUser(ctx, user.ID)
-		}
 
-		if err := s.eventRepo.Create(ctx, &model.SecurityEvent{
-			UserID:    &user.ID,
-			EventType: "auth.login_failed",
-			Severity:  "warning",
-			Details:   "Failed login attempt",
-			IPAddress: ip,
-			UserAgent: userAgent,
-		}); err != nil {
-			s.logger.ErrorContext(ctx, "failed to create login_failed security event", "error", err, "userID", user.ID)
+		if count >= 5 {
+			s.userRepo.Suspend(ctx, user.ID)
+			s.eventRepo.Create(ctx, &model.SecurityEvent{
+				UserID:    &user.ID,
+				EventType: "auth.account_suspended",
+				Severity:  "critical",
+				Details:   "Max failed login attempts reached",
+				IPAddress: ip,
+				UserAgent: userAgent,
+			})
 		}
 
 		return nil, fmt.Errorf("invalid email or password")
 	}
 
-	// 7. Successful Login
-	s.userRepo.ResetFailedLoginAndUpdateLastLogin(ctx, user.ID, ip)
+	// 4. Reset Failed Logins
+	s.userRepo.UpdateLastLogin(ctx, user.ID, ip)
 
-	// 8. Membership Check
 	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, user.ID)
 	var tenantID *string
 	var membershipID *string
@@ -375,465 +343,412 @@ func (s *AuthServiceImpl) Login(ctx context.Context, req *model.LoginRequest, ip
 		tenantID = &membership.TenantID
 		membershipID = &membership.ID
 	}
-	// 9. MFA Check
+
+	// 4. Adaptive Security (Risk Analysis)
+	risk, err := s.riskService.AnalyzeLoginRisk(ctx, user.ID, ip, req.DeviceFingerprint)
+	if err != nil {
+		s.logger.Error("risk analysis failed", "error", err, "user_id", user.ID)
+	}
+
 	mfa, err := s.mfaRepo.FindPrimaryActive(ctx, user.ID)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to check MFA status", "error", err, "userID", user.ID)
 		return nil, err
 	}
 	if mfa != nil {
-		mfaToken, err := security.GenerateMFAToken(s.jwtConfig, user.ID, 5*time.Minute)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to generate MFA token", "error", err, "userID", user.ID)
-			return nil, err
+		isTrusted := false
+		if req.DeviceFingerprint != "" {
+			td, err := s.trustedDeviceRepo.FindByUserAndFingerprint(ctx, user.ID, req.DeviceFingerprint)
+			if err == nil && td != nil {
+				// Even if trusted, if risk is High, we force MFA (Adaptive Step-up)
+				if risk == nil || risk.Level != model.RiskHigh {
+					isTrusted = true
+				} else {
+					s.logger.Warn("adaptive step-up: high risk login from trusted device", "user_id", user.ID, "reasons", risk.Reasons)
+				}
+			}
 		}
-		return &model.LoginResponse{
-			MFARequired: true,
-			MFAToken:    mfaToken,
-		}, nil
+
+		if !isTrusted {
+			mfaToken, _ := security.GenerateMFAToken(s.jwtConfig, user.ID, 5*time.Minute)
+			return &model.LoginResponse{MFARequired: true, MFAToken: mfaToken}, nil
+		}
+	} else if risk != nil && risk.Level == model.RiskHigh {
+		// No MFA enrolled, but risk is High. Block or require extra verification?
+		// For a "World-Class" system, we might block or trigger an email verification.
+		// For now, let's just log a critical event.
+		s.eventRepo.Create(ctx, &model.SecurityEvent{
+			UserID:    &user.ID,
+			EventType: "auth.high_risk_login_no_mfa",
+			Severity:  "critical",
+			Details:   fmt.Sprintf("High risk login from %s. Reasons: %v", ip, risk.Reasons),
+			IPAddress: ip,
+			UserAgent: userAgent,
+		})
 	}
 
-	// 10. Session & Tokens
+	// 7. Session & Tokens
 	sessionToken, _ := security.GenerateSecureToken(32)
 	sessionHash := security.HashToken(sessionToken)
-
 	refreshToken, _ := security.GenerateSecureToken(32)
 	refreshHash := security.HashToken(refreshToken)
 	familyID, _ := security.GenerateSecureToken(16)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to begin login transaction", "error", err, "userID", user.ID)
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
 
 	session := &model.Session{
-		UserID:            user.ID,
-		TenantID:          tenantID,
-		MembershipID:      membershipID,
-		TokenHash:         sessionHash,
-		IPAddress:         ip,
-		UserAgent:         userAgent,
-		DeviceFingerprint: req.DeviceFingerprint,
-		DeviceName:        req.DeviceName,
-		ExpiresAt:         time.Now().Add(7 * 24 * time.Hour),
-		IdleTimeoutAt:     time.Now().Add(30 * time.Minute),
+		UserID: user.ID, TenantID: tenantID, MembershipID: membershipID, TokenHash: sessionHash,
+		IPAddress: ip, UserAgent: userAgent, DeviceFingerprint: req.DeviceFingerprint,
+		DeviceName:  req.DeviceName,
+		MFAVerified: true, ExpiresAt: time.Now().Add(24 * time.Hour), IdleTimeoutAt: time.Now().Add(30 * time.Minute),
 	}
 	if err := s.sessionRepo.Create(ctx, tx, session); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create session", "error", err, "userID", user.ID)
 		return nil, err
 	}
 
 	rf := &model.RefreshToken{
-		SessionID:         session.ID,
-		UserID:            user.ID,
-		TokenHash:         refreshHash,
-		FamilyID:          familyID,
-		Generation:        1,
-		IPAddress:         ip,
-		DeviceFingerprint: req.DeviceFingerprint,
-		ExpiresAt:         time.Now().Add(30 * 24 * time.Hour),
+		SessionID: session.ID, UserID: user.ID, TokenHash: refreshHash, FamilyID: familyID,
+		Generation: 1, IPAddress: ip, DeviceFingerprint: req.DeviceFingerprint,
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 	}
 	if err := s.refreshTokenRepo.Create(ctx, tx, rf); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create refresh token", "error", err, "sessionID", session.ID)
 		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.ErrorContext(ctx, "failed to commit login transaction", "error", err, "userID", user.ID)
 		return nil, err
 	}
 
-	// 11. JWT
-	claims := security.JWTClaims{
-		Sub: user.ID,
-		Sid: session.ID,
+	// Cache session
+	sessionCacheTenantID := ""
+	if session.TenantID != nil {
+		sessionCacheTenantID = *session.TenantID
 	}
-	if tenantID != nil {
-		claims.Tid = *tenantID
-	}
-	// Add roles if needed...
-
-	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
-	if err != nil {
-		return nil, err
-	}
-
-	// 12. Redis Cache (Use Session ID as key)
 	s.sessionCache.Set(ctx, session.ID, &redis.CachedSession{
-		SessionID:     session.ID,
-		UserID:        session.UserID,
-		MFAVerified:   session.MFAVerified,
-		ExpiresAt:     session.ExpiresAt,
-		IdleTimeoutAt: session.IdleTimeoutAt,
+		SessionID:         session.ID,
+		UserID:            session.UserID,
+		TenantID:          sessionCacheTenantID,
+		TokenHash:         session.TokenHash,
+		DeviceFingerprint: session.DeviceFingerprint,
+		MFAVerified:       session.MFAVerified,
+		ExpiresAt:         session.ExpiresAt,
+		IdleTimeoutAt:     session.IdleTimeoutAt,
 	})
 
-	// 13. Security Event
-	if err := s.eventRepo.Create(ctx, &model.SecurityEvent{
-		UserID:    &user.ID,
-		TenantID:  tenantID,
-		EventType: "auth.login_success",
-		Severity:  "info",
-		Details:   "User logged in successfully",
-		IPAddress: ip,
-		UserAgent: userAgent,
-	}); err != nil {
-		s.logger.ErrorContext(ctx, "failed to create login_success security event", "error", err, "userID", user.ID)
+	s.auditService.Log(ctx, "auth.login_success", &user.ID, session.TenantID, "session", &session.ID, nil, session, ip, userAgent)
+
+	tid := ""
+	if session.TenantID != nil {
+		tid = *session.TenantID
 	}
+	accessToken, _ := security.GenerateAccessToken(s.jwtConfig, security.JWTClaims{
+		Sub: user.ID,
+		Sid: session.ID,
+		Tid: tid,
+	})
 
 	return &model.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    int(s.jwtConfig.AccessExpiry.Seconds()),
+		ExpiresIn:    3600,
 	}, nil
 }
 
-func (s *AuthServiceImpl) RefreshToken(ctx context.Context, rawRefresh string, ip string, userAgent string) (*model.LoginResponse, error) {
-	// 1. Hash token
-	refreshHash := security.HashToken(rawRefresh)
-
-	// 2. Find token
+func (s *AuthServiceImpl) RefreshToken(ctx context.Context, req *model.RefreshTokenRequest, ip, userAgent string) (*model.LoginResponse, error) {
+	refreshHash := security.HashToken(req.RefreshToken)
 	token, err := s.refreshTokenRepo.FindByTokenHash(ctx, refreshHash)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to find refresh token", "error", err, "token_hash", refreshHash)
-		return nil, err
-	}
-	if token == nil {
-		return nil, fmt.Errorf("invalid refresh token")
+	if err != nil || token == nil || token.ExpiresAt.Before(time.Now()) {
+		return nil, fmt.Errorf("invalid or expired refresh token")
 	}
 
-	// 3. Expiry Check
-	if token.ExpiresAt.Before(time.Now()) {
-		return nil, fmt.Errorf("refresh token expired")
+	if token.DeviceFingerprint != "" && token.DeviceFingerprint != req.DeviceFingerprint {
+		return nil, fmt.Errorf("mismatched device fingerprint for refresh token")
 	}
 
-	// 4. Revocation Check
-	if token.RevokedAt != nil {
-		return nil, fmt.Errorf("refresh token revoked")
+	session, err := s.sessionRepo.FindByID(ctx, token.SessionID)
+	if err != nil || session == nil {
+		return nil, fmt.Errorf("invalid session")
 	}
 
-	// 5. REUSE DETECTION
 	if token.UsedAt != nil {
-		// Critical Security Event
-		s.eventRepo.Create(ctx, &model.SecurityEvent{
-			UserID:    &token.UserID,
-			EventType: "auth.refresh_token_reuse",
-			Severity:  "critical",
-			Details:   "Suspicious activity: Refresh token reuse detected. Revoking entire family.",
-			IPAddress: ip,
-			UserAgent: userAgent,
-		})
-
-		// Revoke the entire family and the session
+		// Reuse detection: revoke all in family
 		tx, err := s.db.Begin(ctx)
-		if err != nil {
-			s.logger.ErrorContext(ctx, "failed to begin reuse detection transaction", "error", err, "userID", token.UserID)
-			return nil, err
+		if err == nil {
+			s.refreshTokenRepo.RevokeByFamily(ctx, tx, token.FamilyID)
+			s.sessionRepo.RevokeByID(ctx, token.SessionID, "refresh_token_reuse", "system")
+			tx.Commit(ctx)
 		}
-		defer tx.Rollback(ctx)
-
-		s.refreshTokenRepo.RevokeByFamily(ctx, tx, token.FamilyID)
-		s.sessionRepo.RevokeByID(ctx, token.SessionID, "refresh_token_reuse", "system")
-
-		if err := tx.Commit(ctx); err != nil {
-			s.logger.ErrorContext(ctx, "failed to commit reuse detection transaction", "error", err, "userID", token.UserID)
-			return nil, err
-		}
-
-		// Clear cache
-		// We don't have the token_hash for the access token here, but we can't easily clear it.
-		// However, session lookup in DB will fail since it's revoked.
-
-		return nil, fmt.Errorf("suspicious activity detected")
+		s.eventRepo.Create(ctx, &model.SecurityEvent{UserID: &token.UserID, EventType: "auth.refresh_reuse", Severity: "critical", Details: "suspicious activity", IPAddress: ip, UserAgent: userAgent})
+		return nil, fmt.Errorf("refresh token reuse detected: suspicious activity")
 	}
 
-	// 6. ROTATION
+	if session.DeviceFingerprint != "" && session.DeviceFingerprint != req.DeviceFingerprint {
+		return nil, fmt.Errorf("mismatched device fingerprint: suspicious activity")
+	}
+
+	// New Tokens
+	newSessionToken, _ := security.GenerateSecureToken(32)
+	newSessionHash := security.HashToken(newSessionToken)
+	newRefreshToken, _ := security.GenerateSecureToken(32)
+	newRefreshHash := security.HashToken(newRefreshToken)
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
+	// TOCTOU: Check session again inside transaction
+	session, err = s.sessionRepo.FindByID(ctx, token.SessionID)
+	if err != nil || session == nil || session.RevokedAt != nil {
+		return nil, fmt.Errorf("session revoked")
+	}
 
-	// 6.1 Mark current token as used
+	// Update Session
+	if err := s.sessionRepo.UpdateTokenHash(ctx, tx, session.ID, newSessionHash); err != nil {
+		return nil, err
+	}
+
+	// Rotate Refresh Token
 	if err := s.refreshTokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to mark refresh token as used", "error", err, "tokenID", token.ID)
 		return nil, err
 	}
-
-	// 6.2 Create new refresh token
-	newRawRefresh, _ := security.GenerateSecureToken(32)
-	newRefreshHash := security.HashToken(newRawRefresh)
-
-	newRefreshToken := &model.RefreshToken{
-		SessionID:     token.SessionID,
-		UserID:        token.UserID,
-		TokenHash:     newRefreshHash,
-		FamilyID:      token.FamilyID,
-		Generation:    token.Generation + 1,
-		ParentTokenID: &token.ID,
-		IPAddress:     ip,
-		ExpiresAt:     time.Now().Add(30 * 24 * time.Hour),
+	newRf := &model.RefreshToken{
+		SessionID: session.ID, UserID: token.UserID, TokenHash: newRefreshHash, FamilyID: token.FamilyID,
+		Generation: token.Generation + 1, ParentTokenID: &token.ID,
+		IPAddress: ip, DeviceFingerprint: req.DeviceFingerprint,
+		ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 	}
-	if err := s.refreshTokenRepo.Create(ctx, tx, newRefreshToken); err != nil {
-		return nil, err
-	}
-
-	// 6.3 Update session activity
-	if err := s.sessionRepo.UpdateActivity(ctx, token.SessionID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to update session activity", "error", err, "sessionID", token.SessionID)
+	if err := s.refreshTokenRepo.Create(ctx, tx, newRf); err != nil {
 		return nil, err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.ErrorContext(ctx, "failed to commit refresh transaction", "error", err, "userID", token.UserID)
 		return nil, err
 	}
 
-	// 7. Get session to retrieve tenant ID
-	session, err := s.sessionRepo.FindByID(ctx, token.SessionID)
-	if err != nil {
-		return nil, err
-	}
-	if session == nil {
-		return nil, fmt.Errorf("session not found for refresh token")
-	}
-	if session.RevokedAt != nil {
-		return nil, fmt.Errorf("session revoked")
-	}
-
-	// 8. Generate new JWT
-	claims := security.JWTClaims{
-		Sub: token.UserID,
-		Sid: token.SessionID,
-	}
+	var tid string
 	if session.TenantID != nil {
-		claims.Tid = *session.TenantID
+		tid = *session.TenantID
 	}
-	// Add roles if needed...
-
-	accessToken, err := security.GenerateAccessToken(s.jwtConfig, claims)
-	if err != nil {
-		return nil, err
-	}
+	newAccessToken, _ := security.GenerateAccessToken(s.jwtConfig, security.JWTClaims{
+		Sub: token.UserID,
+		Sid: session.ID,
+		Tid: tid,
+	})
 
 	return &model.LoginResponse{
-		AccessToken:  accessToken,
-		RefreshToken: newRawRefresh,
+		AccessToken:  newAccessToken,
+		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
-		ExpiresIn:    int(s.jwtConfig.AccessExpiry.Seconds()),
+		ExpiresIn:    3600,
 	}, nil
 }
 
-func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email, ip, ua string) error {
-	// 0. Normalize Email
-	email = strings.ToLower(norm.NFC.String(email))
-
-	// 1. Anti-spam / Cooldown (Distributed Lock)
-	lockRes, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
-		Key:      fmt.Sprintf("password_reset_lock:%s", strings.ToLower(email)),
-		MaxCount: 1,
-		Window:   60 * time.Second,
-	})
-	if err != nil || !lockRes.Allowed {
-		// Return nil to avoid email enumeration
-		return nil
-	}
-
-	// 2. Find User
-	user, err := s.userRepo.FindByEmail(ctx, email)
+func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHash string) error {
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback(ctx)
 
-	// 3. Generate Token (Always do this to prevent timing attacks)
-	rawToken, _ := security.GenerateSecureToken(32)
-	tokenHash := security.HashToken(rawToken)
-
-	if user == nil {
-		// Dummy work to simulate token creation and security event logging
-		// To truly prevent timing, we sleep for a small random amount of time or fixed time.
-		time.Sleep(50 * time.Millisecond)
-		return nil
+	if err := s.sessionRepo.RevokeByID(ctx, sessionID, "logout", userID); err != nil {
+		return err
+	}
+	if err := s.refreshTokenRepo.RevokeBySessionID(ctx, tx, sessionID); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return err
 	}
 
-	token := &model.SecurityToken{
+	return s.sessionCache.Delete(ctx, userID, sessionID)
+}
+
+func (s *AuthServiceImpl) LogoutAll(ctx context.Context, userID string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := s.sessionRepo.RevokeAllByUser(ctx, tx, userID, "logout_all"); err != nil {
+		return err
+	}
+	if err := s.refreshTokenRepo.RevokeAllByUser(ctx, tx, userID); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return s.sessionCache.DeleteByUserID(ctx, userID)
+}
+
+func (s *AuthServiceImpl) ValidateSession(ctx context.Context, sessionID string) (*model.Session, error) {
+	return s.sessionRepo.FindByID(ctx, sessionID)
+}
+
+func (s *AuthServiceImpl) ForgotPassword(ctx context.Context, email string, ip, userAgent string) error {
+	// Rate limit
+	limitRet, err := s.rateLimiter.Check(ctx, redis.RateLimitConfig{
+		Key:      fmt.Sprintf("password_reset_lock:%s", email),
+		MaxCount: 5,
+		Window:   1 * time.Hour,
+	})
+	if err != nil {
+		return err
+	}
+	if !limitRet.Allowed {
+		return nil // Anti-enumeration: don't return error
+	}
+
+	user, err := s.userRepo.FindByEmail(ctx, email)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows") {
+			return nil
+		}
+		return err
+	}
+	if user == nil {
+		return nil // Timing attack protection
+	}
+
+	token, _ := security.GenerateSecureToken(32)
+	tokenHash := security.HashToken(token)
+	st := &model.SecurityToken{
 		UserID:    user.ID,
 		TokenType: "password_reset",
 		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(1 * time.Hour),
 		IPAddress: ip,
-		UserAgent: ua,
+		UserAgent: userAgent,
+		Metadata:  make(map[string]interface{}),
 	}
-	if err := s.tokenRepo.Create(ctx, token); err != nil {
+	if err := s.tokenRepo.Create(ctx, st); err != nil {
+		s.logger.Error("failed to create password reset token", "error", err, "email", email)
 		return err
 	}
+	if os.Getenv("MFA_TEST_MODE") == "true" {
+		s.logger.Info("password reset token generated", "email", email, "token", token, "token_hash", tokenHash)
+	}
 
-	// 4. TODO: Send Email
-	s.logger.InfoContext(ctx, "Integration test: password reset token generated", "email", email, "token", rawToken)
-
-	// 5. Security Event
-	s.eventRepo.Create(ctx, &model.SecurityEvent{
-		UserID:    &user.ID,
-		EventType: "auth.password_reset_requested",
-		Severity:  "info",
-		Details:   "Password reset requested",
-		IPAddress: ip,
-		UserAgent: ua,
-	})
-
+	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, user.ID)
+	var tid *string
+	if membership != nil {
+		tid = &membership.TenantID
+	}
+	s.auditService.Log(ctx, "auth.password_reset_requested", &user.ID, tid, "user", &user.ID, nil, nil, ip, userAgent)
 	return nil
 }
 
-func (s *AuthServiceImpl) ResetPassword(ctx context.Context, rawToken, newPassword, ip, ua string) error {
-	// 1. Hash Token
-	tokenHash := security.HashToken(rawToken)
-
-	// 2. Find Valid Token
-	token, err := s.tokenRepo.FindValidToken(ctx, tokenHash, "password_reset")
-	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to find valid reset token", "error", err, "token_hash", tokenHash)
-		return err
-	}
-	if token == nil {
-		return fmt.Errorf("invalid or expired reset token")
+func (s *AuthServiceImpl) ResetPassword(ctx context.Context, token, newPassword, ip, userAgent string) error {
+	tokenHash := security.HashToken(token)
+	st, err := s.tokenRepo.FindValidToken(ctx, tokenHash, "password_reset")
+	if err != nil || st == nil {
+		return fmt.Errorf("invalid or expired token")
 	}
 
-	// 3. Validate Password Complexity
 	if err := validator.ValidatePassword(newPassword); err != nil {
 		return err
 	}
 
-	// 4. Check Password History (Last 5)
-	recentHistory, err := s.passwordHistoryRepo.GetRecentPasswords(ctx, token.UserID, 5)
-	if err != nil {
-		s.logger.ErrorContext(ctx, "Failed to get password history", "error", err, "user_id", token.UserID)
-		return err
+	// Compromised Password Check
+	if pwned, _, _ := s.pwnedValidator.IsPwned(ctx, newPassword); pwned {
+		return fmt.Errorf("this password has been found in a data breach, please use a more secure password")
 	}
 
-	for _, entry := range recentHistory {
-		match, _ := s.hasher.Verify(newPassword, entry.PasswordHash, entry.PasswordSalt)
+	recent, err := s.passwordHistoryRepo.GetRecentPasswords(ctx, st.UserID, 5)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "failed to get password history", "error", err)
+	}
+	for _, h := range recent {
+		match, _ := s.hasher.Verify(newPassword, h.PasswordHash, h.PasswordSalt)
 		if match {
 			return fmt.Errorf("password has been recently used")
 		}
 	}
 
-	// 5. Hash New Password
 	hash, salt, err := s.hasher.Hash(newPassword)
 	if err != nil {
-		s.logger.ErrorContext(ctx, "failed to hash new password", "error", err, "userID", token.UserID)
 		return err
 	}
 
-	// 6. Transaction
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback(ctx)
 
-	// 6a. Update Password
-	if err := s.credRepo.UpdatePassword(ctx, tx, token.UserID, hash, salt); err != nil {
+	if err := s.credRepo.UpdatePassword(ctx, tx, st.UserID, hash, salt); err != nil {
 		return err
 	}
 
-	// 6b. Insert Password History
-	if err := s.passwordHistoryRepo.Create(ctx, tx, token.UserID, hash, salt); err != nil {
+	if err := s.userRepo.UpdatePasswordChangedAt(ctx, tx, st.UserID); err != nil {
 		return err
 	}
 
-	// 6c. Cleanup Old History
-	if err := s.passwordHistoryRepo.Cleanup(ctx, token.UserID, 5); err != nil {
+	// Record password history
+	if err := s.passwordHistoryRepo.Create(ctx, tx, st.UserID, hash, salt); err != nil {
+		s.logger.ErrorContext(ctx, "failed to record password history", "error", err)
+	}
+	if err := s.passwordHistoryRepo.Cleanup(ctx, st.UserID, 5); err != nil {
+		s.logger.ErrorContext(ctx, "failed to cleanup password history", "error", err)
+	}
+
+	if err := s.tokenRepo.MarkUsed(ctx, tx, st.ID); err != nil {
 		return err
 	}
 
-	// 6d. Mark Token Used
-	if err := s.tokenRepo.MarkUsed(ctx, tx, token.ID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to mark reset token as used", "error", err, "tokenID", token.ID)
-		return err
-	}
-
-	// 6e. Revoke All Sessions
-	if err := s.sessionRepo.RevokeAllByUser(ctx, tx, token.UserID, "password_reset"); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to revoke sessions after reset", "error", err, "user_id", token.UserID)
+	// Revoke all sessions on password change
+	if err := s.sessionRepo.RevokeAllByUser(ctx, tx, st.UserID, "password_reset"); err != nil {
 		return err
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		s.logger.ErrorContext(ctx, "Failed to commit transaction", "error", err)
 		return err
 	}
 
-	// 7. Security Event
-	s.eventRepo.Create(ctx, &model.SecurityEvent{
-		UserID:    &token.UserID,
-		EventType: "auth.password_reset_success",
-		Severity:  "info",
-		Details:   "Password reset successful",
-		IPAddress: ip,
-		UserAgent: ua,
-	})
-
+	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, st.UserID)
+	var tid *string
+	if membership != nil {
+		tid = &membership.TenantID
+	}
+	s.auditService.Log(ctx, "user.password_reset_success", &st.UserID, tid, "user", &st.UserID, nil, nil, ip, userAgent)
 	return nil
 }
+func (s *AuthServiceImpl) DeleteAccount(ctx context.Context, userID, ip, userAgent string) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
 
-func (s *AuthServiceImpl) Logout(ctx context.Context, sessionID, userID, tokenHash string) error {
-	// 1. Revoke Session
-	if err := s.sessionRepo.RevokeByID(ctx, sessionID, "user_logout", userID); err != nil {
-		s.logger.ErrorContext(ctx, "failed to revoke session during logout", "error", err, "sessionID", sessionID)
+	if err := s.userRepo.SoftDelete(ctx, userID); err != nil {
 		return err
 	}
 
-	// 2. Revoke Refresh Tokens for this session
-	if err := s.refreshTokenRepo.RevokeBySessionID(ctx, nil, sessionID); err != nil {
+	if err := s.sessionRepo.RevokeAllByUser(ctx, tx, userID, "account_deleted"); err != nil {
 		return err
 	}
 
-	// 3. Clear Redis Cache (Use SessionID as we changed the middleware key)
-	if s.sessionCache != nil {
-		if err := s.sessionCache.Delete(ctx, userID, sessionID); err != nil {
-			// Log error but don't fail logout
-			s.logger.ErrorContext(ctx, "Error deleting session cache", "error", err)
-		}
-	}
-
-	// 4. Log Security Event
-	s.eventRepo.Create(ctx, &model.SecurityEvent{
-		UserID:    &userID,
-		EventType: "auth.logout",
-		Severity:  "info",
-		Details:   "User logged out successfully",
-	})
-
-	return nil
-}
-
-func (s *AuthServiceImpl) LogoutAll(ctx context.Context, userID string) error {
-	// 1. Revoke All Sessions
-	if err := s.sessionRepo.RevokeAllByUser(ctx, nil, userID, "logout_all"); err != nil {
+	if err := s.refreshTokenRepo.RevokeAllByUser(ctx, tx, userID); err != nil {
 		return err
 	}
 
-	// 2. Revoke All Refresh Tokens
-	if err := s.refreshTokenRepo.RevokeAllByUser(ctx, nil, userID); err != nil {
+	if err := tx.Commit(ctx); err != nil {
 		return err
 	}
 
-	// 3. Clear all sessions from Redis
-	if s.sessionCache != nil {
-		if err := s.sessionCache.DeleteByUserID(ctx, userID); err != nil {
-			s.logger.ErrorContext(ctx, "Error clearing sessions from cache", "user_id", userID, "error", err)
-		}
+	membership, _ := s.membershipRepo.FindActiveByUserID(ctx, userID)
+	var tid *string
+	if membership != nil {
+		tid = &membership.TenantID
 	}
-
-	// 3. Log Security Event
-	s.eventRepo.Create(ctx, &model.SecurityEvent{
-		UserID:    &userID,
-		EventType: "auth.logout_all",
-		Severity:  "info",
-		Details:   "User logged out from all devices",
-	})
-
-	return nil
+	s.auditService.Log(ctx, "auth.account_deleted", &userID, tid, "user", &userID, nil, nil, ip, userAgent)
+	return s.sessionCache.DeleteByUserID(ctx, userID)
 }

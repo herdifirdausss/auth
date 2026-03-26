@@ -14,6 +14,7 @@ type DB interface {
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 }
 
+//go:generate mockgen -source=$GOFILE -destination=../mocks/mock_$GOFILE -package=mocks
 // Pool defines the interface for a connection pool
 type Pool interface {
 	DB

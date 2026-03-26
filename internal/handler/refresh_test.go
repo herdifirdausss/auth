@@ -28,7 +28,7 @@ func TestRefreshHandler_Success(t *testing.T) {
 		ExpiresIn:    900,
 	}
 
-	mockService.EXPECT().RefreshToken(gomock.Any(), "old-refresh", gomock.Any(), gomock.Any()).Return(res, nil)
+	mockService.EXPECT().RefreshToken(gomock.Any(), &model.RefreshTokenRequest{RefreshToken: "old-refresh"}, gomock.Any(), gomock.Any()).Return(res, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
 	req.AddCookie(&http.Cookie{Name: "refresh_token", Value: "old-refresh"})
@@ -77,7 +77,7 @@ func TestRefreshHandler_ReuseDetected(t *testing.T) {
 	mockService := mocks.NewMockAuthService(ctrl)
 	h := NewAuthHandler(mockService, slog.Default())
 
-	mockService.EXPECT().RefreshToken(gomock.Any(), "reused-token", gomock.Any(), gomock.Any()).
+	mockService.EXPECT().RefreshToken(gomock.Any(), &model.RefreshTokenRequest{RefreshToken: "reused-token"}, gomock.Any(), gomock.Any()).
 		Return(nil, fmt.Errorf("suspicious activity detected"))
 
 	req := httptest.NewRequest(http.MethodPost, "/auth/token/refresh", nil)
