@@ -1,0 +1,38 @@
+time=2026-03-26T07:53:48.034+07:00 level=INFO msg="Postgres pool initialized" host=localhost max_conns=8 min_conns=0 total_conns=1
+time=2026-03-26T07:53:48.041+07:00 level=INFO msg="Redis client initialized" addr=localhost:6379 db=0 pool_size=80
+time=2026-03-26T07:53:48.041+07:00 level=INFO msg="Infrastructure initialized successfully" env=development
+time=2026-03-26T07:53:48.041+07:00 level=INFO msg="Cleanup manager started" interval=1h0m0s
+time=2026-03-26T07:53:48.041+07:00 level=INFO msg="Starting server" addr=:8080
+time=2026-03-26T07:53:48.041+07:00 level=INFO msg="Starting background cleanup"
+time=2026-03-26T07:53:48.071+07:00 level=INFO msg="Cleanup finished" removed_sessions=0 removed_refresh_tokens=0 duration=29.835ms
+time=2026-03-26T07:53:50.520+07:00 level=INFO msg="HTTP Request started" method=GET path=/health remote_addr=[::1]:53578 proto=HTTP/1.1
+time=2026-03-26T07:53:50.520+07:00 level=INFO msg="HTTP Request completed" method=GET path=/health status=404 latency=101µs
+time=2026-03-26T07:53:50.530+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/register remote_addr=[::1]:53579 proto=HTTP/1.1
+time=2026-03-26T07:53:50.659+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/register status=201 latency=129.394333ms
+time=2026-03-26T07:53:52.717+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/login remote_addr=[::1]:53581 proto=HTTP/1.1
+time=2026-03-26T07:53:52.724+07:00 level=ERROR msg="login failed" error="please verify your email" email=test_1774486430@example.com request_id=57c44167-792a-411a-adc3-1e9899d328e3
+time=2026-03-26T07:53:52.724+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/login status=400 latency=6.648708ms
+time=2026-03-26T07:53:52.745+07:00 level=INFO msg="HTTP Request started" method=GET path=/auth/verify-email remote_addr=[::1]:53582 proto=HTTP/1.1
+time=2026-03-26T07:53:52.745+07:00 level=INFO msg="HTTP Request completed" method=GET path=/auth/verify-email status=400 latency=85.834µs
+time=2026-03-26T07:53:52.764+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/login remote_addr=[::1]:53583 proto=HTTP/1.1
+time=2026-03-26T07:53:52.765+07:00 level=ERROR msg="login failed" error="please verify your email" email=test_1774486430@example.com request_id=120d73fe-8da2-43d8-85a6-61b0227a53ac
+time=2026-03-26T07:53:52.765+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/login status=400 latency=1.075584ms
+time=2026-03-26T07:53:52.783+07:00 level=INFO msg="HTTP Request started" method=GET path=/auth/me remote_addr=[::1]:53584 proto=HTTP/1.1
+time=2026-03-26T07:53:52.783+07:00 level=INFO msg="HTTP Request completed" method=GET path=/auth/me status=401 latency=82.25µs
+time=2026-03-26T07:53:52.793+07:00 level=INFO msg="HTTP Request started" method=GET path=/auth/mfa/setup remote_addr=[::1]:53585 proto=HTTP/1.1
+time=2026-03-26T07:53:52.793+07:00 level=INFO msg="HTTP Request completed" method=GET path=/auth/mfa/setup status=401 latency=51.167µs
+time=2026-03-26T07:53:52.805+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/mfa/verify-setup remote_addr=[::1]:53586 proto=HTTP/1.1
+time=2026-03-26T07:53:52.805+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/mfa/verify-setup status=401 latency=45.458µs
+time=2026-03-26T07:53:52.817+07:00 level=INFO msg="HTTP Request started" method=GET path=/auth/me remote_addr=[::1]:53587 proto=HTTP/1.1
+time=2026-03-26T07:53:52.817+07:00 level=INFO msg="HTTP Request completed" method=GET path=/auth/me status=401 latency=44.458µs
+time=2026-03-26T07:53:52.827+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/login remote_addr=[::1]:53588 proto=HTTP/1.1
+time=2026-03-26T07:53:52.828+07:00 level=ERROR msg="login failed" error="please verify your email" email=test_1774486430@example.com request_id=069e37b4-ce2b-4ef6-8e6f-47b914be2a0e
+time=2026-03-26T07:53:52.828+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/login status=400 latency=1.214334ms
+time=2026-03-26T07:53:52.838+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/mfa/challenge remote_addr=[::1]:53589 proto=HTTP/1.1
+time=2026-03-26T07:53:52.838+07:00 level=ERROR msg="MFA challenge failed" error="invalid or expired mfa token" request_id=c96ac1c4-3363-4cce-90ab-82af88bda0c2
+time=2026-03-26T07:53:52.838+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/mfa/challenge status=401 latency=129.375µs
+time=2026-03-26T07:53:52.846+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/token/refresh remote_addr=[::1]:53590 proto=HTTP/1.1
+time=2026-03-26T07:53:52.846+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/token/refresh status=401 latency=67.167µs
+time=2026-03-26T07:53:52.857+07:00 level=INFO msg="HTTP Request started" method=POST path=/auth/logout remote_addr=[::1]:53591 proto=HTTP/1.1
+time=2026-03-26T07:53:52.857+07:00 level=INFO msg="HTTP Request completed" method=POST path=/auth/logout status=401 latency=49.459µs
+time=2026-03-26T07:54:03.005+07:00 level=INFO msg="traces export: exporter export timeout: rpc error: code = Unavailable desc = delegating_resolver: invalid target address \"\": missing address"

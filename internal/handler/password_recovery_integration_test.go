@@ -18,6 +18,8 @@ import (
 	"github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	"github.com/alicebob/miniredis/v2"
 	redisLib "github.com/redis/go-redis/v9"
+	"go.uber.org/mock/gomock"
+	"github.com/herdifirdausss/auth/internal/mocks"
 )
 
 func TestPasswordRecovery_Integration(t *testing.T) {
@@ -27,12 +29,18 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 	redisClient := redisLib.NewClient(&redisLib.Options{Addr: mr.Addr()})
 	rateLimiter := redis.NewRateLimiter(redisClient)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
 	setup := func(t *testing.T) (pgxmock.PgxPoolIface, *AuthHandler) {
 		mock, err := pgxmock.NewPool()
 		if err != nil {
 			t.Fatal(err)
 		}
 		
+		mockAuditService := mocks.NewMockAuditService(ctrl)
+		mockAuditService.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
 		userRepo := repository.NewPostgresUserRepository(mock)
 		credRepo := repository.NewPostgresCredentialRepository(mock)
 		tokenRepo := repository.NewPostgresSecurityTokenRepository(mock)
@@ -40,10 +48,23 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 		historyRepo := repository.NewPostgresPasswordHistoryRepository(mock)
 		sessionRepo := repository.NewPostgresSessionRepository(mock)
 
+		membershipRepo := mocks.NewMockTenantMembershipRepository(ctrl)
+		membershipRepo.EXPECT().FindActiveByUserID(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
+
+		mockRiskService := mocks.NewMockRiskService(ctrl)
+		mockPwnedValidator := mocks.NewMockPwnedValidator(ctrl)
+
+		// Default behaviors for new mocks
+		mockPwnedValidator.EXPECT().IsPwned(gomock.Any(), gomock.Any()).Return(false, 0, nil).AnyTimes()
+		mockRiskService.EXPECT().AnalyzeLoginRisk(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&model.RiskAssessment{Level: model.RiskLow}, nil).AnyTimes()
+
 		authService := service.NewAuthService(
-			mock, userRepo, credRepo, tokenRepo, eventRepo, 
-			nil, nil, sessionRepo, nil, nil, historyRepo,
-			security.NewArgon2idHasher(), rateLimiter, nil, 
+			mock, userRepo, credRepo, tokenRepo, eventRepo,
+			nil, membershipRepo, sessionRepo, nil, nil, historyRepo,
+			nil, nil, nil, // trustedDeviceRepo, roleRepo, membershipRoleRepo
+			mockRiskService, mockPwnedValidator,
+			mockAuditService,
+			security.NewArgon2idHasher(), rateLimiter, nil,
 			security.JWTConfig{}, slog.Default(),
 		)
 
@@ -60,14 +81,11 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 		// Case 1: User Exists
 		mock.ExpectQuery(`SELECT (.+) FROM users WHERE LOWER\(email\) = LOWER\(\$1\)`).
 			WithArgs(email).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "username", "is_active", "is_verified", "is_suspended", "failed_login_count", "created_at", "updated_at"}).
-				AddRow("user-1", email, "target", true, true, false, 0, time.Now(), time.Now()))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "username", "phone", "is_active", "is_verified", "is_suspended", "failed_login_count", "last_login_at", "last_login_ip", "password_changed_at", "metadata", "created_at", "updated_at"}).
+				AddRow("user-1", email, "target", nil, true, true, false, 0, nil, nil, nil, make(map[string]interface{}), time.Now(), time.Now()))
 		mock.ExpectQuery(`INSERT INTO security_tokens`).
-			WithArgs("user-1", "password_reset", pgxmock.AnyArg(), pgxmock.AnyArg(), "127.0.0.1", "ua").
+			WithArgs("user-1", "password_reset", pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), pgxmock.AnyArg(), "127.0.0.1", "ua").
 			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at"}).AddRow("token-1", time.Now()))
-		mock.ExpectQuery(`INSERT INTO security_events`).
-			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "auth.password_reset_requested", "info", "Password reset requested", "127.0.0.1", "ua").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at"}).AddRow("event-1", time.Now()))
 
 		w1 := httptest.NewRecorder()
 		req1 := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", bytes.NewBuffer(reqBody))
@@ -81,7 +99,7 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 		reqBody2, _ := json.Marshal(model.ForgotPasswordRequest{Email: email2})
 		mock.ExpectQuery(`SELECT (.+) FROM users WHERE LOWER\(email\) = LOWER\(\$1\)`).
 			WithArgs(email2).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "username", "is_active", "is_verified", "is_suspended", "failed_login_count", "created_at", "updated_at"}))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "email", "username", "phone", "is_active", "is_verified", "is_suspended", "failed_login_count", "last_login_at", "last_login_ip", "password_changed_at", "metadata", "created_at", "updated_at"}))
 
 		w2 := httptest.NewRecorder()
 		req2 := httptest.NewRequest(http.MethodPost, "/auth/forgot-password", bytes.NewBuffer(reqBody2))
@@ -109,18 +127,21 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 		// 1. Find Valid Token
 		mock.ExpectQuery(`SELECT (.+) FROM security_tokens WHERE token_hash = \$1`).
 			WithArgs(tokenHash, "password_reset").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "token_type", "token_hash", "expires_at", "used_at", "ip_address", "user_agent", "created_at"}).
-				AddRow("token-1", "user-1", "password_reset", tokenHash, time.Now().Add(time.Hour), nil, "127.0.0.1", "ua", time.Now()))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "token_type", "token_hash", "expires_at", "used_at", "email", "metadata", "ip_address", "user_agent", "created_at"}).
+				AddRow("token-1", "user-1", "password_reset", tokenHash, time.Now().Add(time.Hour), nil, nil, make(map[string]interface{}), "127.0.0.1", "ua", time.Now()))
 
 		// 2. Check History
-		mock.ExpectQuery(`SELECT password_hash, password_salt FROM password_history WHERE user_id = \$1`).
+		mock.ExpectQuery(`SELECT (.+) FROM password_history WHERE user_id = \$1`).
 			WithArgs("user-1", 5).
-			WillReturnRows(pgxmock.NewRows([]string{"password_hash", "password_salt"}))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "password_hash", "password_salt", "created_at"}))
 
 		// 3. Transaction
 		mock.ExpectBegin()
 		mock.ExpectExec(`UPDATE user_credentials`).
 			WithArgs("user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+		mock.ExpectExec(`UPDATE users SET password_changed_at = now\(\)`).
+			WithArgs("user-1").
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 		mock.ExpectExec(`INSERT INTO password_history`).
 			WithArgs("user-1", pgxmock.AnyArg(), pgxmock.AnyArg()).
@@ -136,10 +157,7 @@ func TestPasswordRecovery_Integration(t *testing.T) {
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 		mock.ExpectCommit()
 
-		// 4. Security Event
-		mock.ExpectQuery(`INSERT INTO security_events`).
-			WithArgs(pgxmock.AnyArg(), pgxmock.AnyArg(), "auth.password_reset_success", "info", "Password reset successful", "127.0.0.1", "ua").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at"}).AddRow("event-2", time.Now()))
+		// 4. Security Event (moved to AuditService)
 
 		w := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodPost, "/auth/reset-password", bytes.NewBuffer(reqBody))

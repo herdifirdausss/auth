@@ -97,6 +97,15 @@ func main() {
 	refreshTokenRepo := repository.NewPostgresRefreshTokenRepository(db)
 	mfaRepo := repository.NewPostgresMFARepository(db)
 	passwordHistoryRepo := repository.NewPostgresPasswordHistoryRepository(db)
+	roleRepo := repository.NewPostgresRoleRepository(db)
+	membershipRoleRepo := repository.NewPostgresMembershipRoleRepository(db)
+	trustedDeviceRepo := repository.NewPostgresTrustedDeviceRepository(db)
+	auditLogRepo := repository.NewAuditLogRepository(db)
+
+	auditService := service.NewAuditService(auditLogRepo)
+	pwnedValidator := security.NewDefaultPwnedValidator()
+	riskService := service.NewRiskService(userRepo, trustedDeviceRepo, l)
+	permCache := redis.NewPermissionCache(redisClient, 15*time.Minute)
 
 	// 9. Services (Injecting specialized logger)
 	authService := service.NewAuthService(
@@ -111,6 +120,12 @@ func main() {
 		refreshTokenRepo,
 		mfaRepo,
 		passwordHistoryRepo,
+		trustedDeviceRepo,
+		roleRepo,
+		membershipRoleRepo,
+		riskService,
+		pwnedValidator,
+		auditService,
 		security.NewArgon2idHasher(),
 		redis.NewRateLimiter(redisClient),
 		redis.NewSessionCache(redisClient, time.Hour),
@@ -128,9 +143,49 @@ func main() {
 		jwtConfig,
 		redis.NewRateLimiter(redisClient),
 		redis.NewSessionCache(redisClient, time.Hour),
+		trustedDeviceRepo,
 		utils.RealClock{},
 		l,
 	)
+
+	tenantService := service.NewTenantService(
+		db,
+		userRepo,
+		tenantMembershipRepo,
+		tenantRepo,
+		roleRepo,
+		l,
+	)
+
+	permissionService := service.NewDefaultPermissionService(roleRepo, permCache)
+
+	adminService := service.NewAdminService(tenantRepo, l)
+
+	tenantAdminService := service.NewTenantAdminService(
+		db,
+		tenantRepo,
+		tenantMembershipRepo,
+		roleRepo,
+		membershipRoleRepo,
+		auditService,
+	)
+
+	webAuthnService, err := service.NewWebAuthnService(
+		userRepo,
+		mfaRepo,
+		sessionRepo,
+		refreshTokenRepo,
+		tenantMembershipRepo,
+		jwtConfig,
+		redis.NewRateLimiter(redisClient),
+		redis.NewSessionCache(redisClient, time.Hour),
+		utils.RealClock{},
+		l,
+	)
+	if err != nil {
+		l.Error("Failed to initialize WebAuthn service", "error", err)
+		os.Exit(1)
+	}
 
 	// 10. Background Workers (Cleanup Manager)
 	cleanupManager := cron.NewCleanupManager(sessionRepo, refreshTokenRepo, 1*time.Hour, l)
@@ -141,9 +196,13 @@ func main() {
 	authMiddleware := middleware.NewAuthMiddleware(jwtConfig, sessionRepo, redis.NewSessionCache(redisClient, time.Hour), tenantMembershipRepo)
 	userHandler := handler.NewUserHandler()
 	mfaHandler := handler.NewMFAHandler(mfaService, l)
+	webAuthnHandler := handler.NewWebAuthnHandler(webAuthnService, l)
+	adminHandler := handler.NewAdminHandler(adminService, l)
+	tenantAdminHandler := handler.NewTenantAdminHandler(tenantAdminService, l)
+	_ = tenantService // Reserved for future administrative handler
 
 	// 12. Router & HTTP Server
-	r := router.NewRouter(authHandler, userHandler, mfaHandler, authMiddleware, reg)
+	r := router.NewRouter(authHandler, userHandler, mfaHandler, webAuthnHandler, adminHandler, tenantAdminHandler, authMiddleware, permissionService, reg)
 
 	// Wrap Router with Global Middlewares
 	var h http.Handler = r

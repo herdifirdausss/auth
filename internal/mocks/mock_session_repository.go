@@ -143,6 +143,20 @@ func (mr *MockSessionRepositoryMockRecorder) UpdateActivity(ctx, sessionID any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivity", reflect.TypeOf((*MockSessionRepository)(nil).UpdateActivity), ctx, sessionID)
 }
 
+// UpdateTokenHash mocks base method.
+func (m *MockSessionRepository) UpdateTokenHash(ctx context.Context, tx pgx.Tx, sessionID, tokenHash string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTokenHash", ctx, tx, sessionID, tokenHash)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTokenHash indicates an expected call of UpdateTokenHash.
+func (mr *MockSessionRepositoryMockRecorder) UpdateTokenHash(ctx, tx, sessionID, tokenHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTokenHash", reflect.TypeOf((*MockSessionRepository)(nil).UpdateTokenHash), ctx, tx, sessionID, tokenHash)
+}
+
 // MockRefreshTokenRepository is a mock of RefreshTokenRepository interface.
 type MockRefreshTokenRepository struct {
 	ctrl     *gomock.Controller

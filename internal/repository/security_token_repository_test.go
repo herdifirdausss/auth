@@ -31,7 +31,7 @@ func TestPostgresSecurityTokenRepository_Create(t *testing.T) {
 
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectQuery(`INSERT INTO security_tokens`).
-			WithArgs(token.UserID, token.TokenType, token.TokenHash, token.ExpiresAt, token.IPAddress, token.UserAgent).
+			WithArgs(token.UserID, token.TokenType, token.TokenHash, token.Email, token.Metadata, token.ExpiresAt, token.IPAddress, token.UserAgent).
 			WillReturnRows(pgxmock.NewRows([]string{"id", "created_at"}).
 				AddRow("token-1", time.Now()))
 
@@ -56,8 +56,8 @@ func TestPostgresSecurityTokenRepository_FindValidToken(t *testing.T) {
 	t.Run("Success", func(t *testing.T) {
 		mock.ExpectQuery(`SELECT (.+) FROM security_tokens WHERE token_hash = \$1 AND token_type = \$2`).
 			WithArgs(tokenHash, tokenType).
-			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "token_type", "token_hash", "expires_at", "used_at", "ip_address", "user_agent", "created_at"}).
-				AddRow("token-1", "user-1", tokenType, tokenHash, time.Now().Add(time.Hour), nil, "127.0.0.1", "ua", time.Now()))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "user_id", "token_type", "token_hash", "expires_at", "used_at", "email", "metadata", "ip_address", "user_agent", "created_at"}).
+				AddRow("token-1", "user-1", tokenType, tokenHash, time.Now().Add(time.Hour), nil, nil, make(map[string]interface{}), "127.0.0.1", "ua", time.Now()))
 
 		token, err := repo.FindValidToken(ctx, tokenHash, tokenType)
 		assert.NoError(t, err)

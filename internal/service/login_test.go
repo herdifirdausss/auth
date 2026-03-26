@@ -15,7 +15,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func setupLoginTest(t *testing.T) (*AuthServiceImpl, *mocks.MockUserRepository, *mocks.MockCredentialRepository, *mocks.MockPasswordHasher, *mocks.MockRateLimiter, *mocks.MockSecurityEventRepository, *mocks.MockTransactor, *mocks.MockSessionRepository, *mocks.MockRefreshTokenRepository, *mocks.MockMFARepository, *mocks.MockSessionCache, *gomock.Controller) {
+func setupLoginTest(t *testing.T) (*AuthServiceImpl, *mocks.MockUserRepository, *mocks.MockCredentialRepository, *mocks.MockPasswordHasher, *mocks.MockRateLimiter, *mocks.MockSecurityEventRepository, *mocks.MockPool, *mocks.MockSessionRepository, *mocks.MockRefreshTokenRepository, *mocks.MockMFARepository, *mocks.MockSessionCache, *mocks.MockAuditService, *gomock.Controller) {
 	ctrl := gomock.NewController(t)
 	
 	userRepo := mocks.NewMockUserRepository(ctrl)
@@ -23,11 +23,16 @@ func setupLoginTest(t *testing.T) (*AuthServiceImpl, *mocks.MockUserRepository, 
 	hasher := mocks.NewMockPasswordHasher(ctrl)
 	rateLimiter := mocks.NewMockRateLimiter(ctrl)
 	eventRepo := mocks.NewMockSecurityEventRepository(ctrl)
-	db := mocks.NewMockTransactor(ctrl)
+	db := mocks.NewMockPool(ctrl)
 	sessRepo := mocks.NewMockSessionRepository(ctrl)
 	rfRepo := mocks.NewMockRefreshTokenRepository(ctrl)
 	mfaRepo := mocks.NewMockMFARepository(ctrl)
 	sessionCache := mocks.NewMockSessionCache(ctrl)
+	auditService := mocks.NewMockAuditService(ctrl)
+
+	pwnedValidator := mocks.NewMockPwnedValidator(ctrl)
+
+	auditService.EXPECT().Log(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	s := &AuthServiceImpl{
 		db:                  db,
@@ -40,6 +45,9 @@ func setupLoginTest(t *testing.T) (*AuthServiceImpl, *mocks.MockUserRepository, 
 		refreshTokenRepo:    rfRepo,
 		mfaRepo:             mfaRepo,
 		sessionCache:        sessionCache,
+		auditService:        auditService,
+		riskService:         mocks.NewMockRiskService(ctrl),
+		pwnedValidator:      pwnedValidator,
 		membershipRepo:      mocks.NewMockTenantMembershipRepository(ctrl),
 		jwtConfig: security.JWTConfig{
 			SecretKey:    []byte("test-secret-key-at-least-thirty-two-bytes-long"),
@@ -48,11 +56,11 @@ func setupLoginTest(t *testing.T) (*AuthServiceImpl, *mocks.MockUserRepository, 
 		logger: slog.Default(),
 	}
 
-	return s, userRepo, credRepo, hasher, rateLimiter, eventRepo, db, sessRepo, rfRepo, mfaRepo, sessionCache, ctrl
+	return s, userRepo, credRepo, hasher, rateLimiter, eventRepo, db, sessRepo, rfRepo, mfaRepo, sessionCache, auditService, ctrl
 }
 
 func TestLogin_Success(t *testing.T) {
-	s, userRepo, credRepo, hasher, rateLimiter, eventRepo, db, sessRepo, rfRepo, mfaRepo, sessionCache, ctrl := setupLoginTest(t)
+	s, userRepo, credRepo, hasher, rateLimiter, _, db, sessRepo, rfRepo, mfaRepo, sessionCache, _, ctrl := setupLoginTest(t)
 	defer ctrl.Finish()
 
 	ctx := context.Background()
@@ -70,12 +78,13 @@ func TestLogin_Success(t *testing.T) {
 	userRepo.EXPECT().FindByEmail(ctx, req.Email).Return(user, nil)
 	credRepo.EXPECT().FindByUserID(ctx, user.ID).Return(cred, nil)
 	hasher.EXPECT().Verify(req.Password, cred.PasswordHash, cred.PasswordSalt).Return(true, nil)
-	userRepo.EXPECT().ResetFailedLoginAndUpdateLastLogin(ctx, user.ID, ip).Return(nil)
+	userRepo.EXPECT().UpdateLastLogin(ctx, user.ID, ip).Return(nil)
 	
 	// Mock MembershipRepo (added to setupLoginTest helper properly if needed, but here I'll just use it)
 	membershipRepo := s.membershipRepo.(*mocks.MockTenantMembershipRepository)
 	membershipRepo.EXPECT().FindActiveByUserID(ctx, user.ID).Return(nil, nil)
 	mfaRepo.EXPECT().FindPrimaryActive(ctx, user.ID).Return(nil, nil)
+	s.riskService.(*mocks.MockRiskService).EXPECT().AnalyzeLoginRisk(ctx, user.ID, ip, req.DeviceFingerprint).Return(&model.RiskAssessment{Level: model.RiskLow}, nil)
 	mockTx := mocks.NewMockTx(ctrl)
 	db.EXPECT().Begin(ctx).Return(mockTx, nil)
 	sessRepo.EXPECT().Create(ctx, mockTx, gomock.Any()).Return(nil)
@@ -84,7 +93,6 @@ func TestLogin_Success(t *testing.T) {
 	mockTx.EXPECT().Rollback(ctx).Return(nil).AnyTimes()
 
 	sessionCache.EXPECT().Set(ctx, gomock.Any(), gomock.Any()).Return(nil)
-	eventRepo.EXPECT().Create(ctx, gomock.Any()).Return(nil)
 
 	res, err := s.Login(ctx, req, ip, ua)
 	
@@ -94,7 +102,7 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_UserNotFound_DummyHash(t *testing.T) {
-	s, userRepo, _, hasher, rateLimiter, _, _, _, _, _, _, ctrl := setupLoginTest(t)
+	s, userRepo, _, hasher, rateLimiter, _, _, _, _, _, _, _, ctrl := setupLoginTest(t)
 	defer ctrl.Finish()
 
 	ctx := context.Background()
@@ -111,12 +119,12 @@ func TestLogin_UserNotFound_DummyHash(t *testing.T) {
 }
 
 func TestLogin_WrongPassword_Suspension(t *testing.T) {
-	s, userRepo, credRepo, hasher, rateLimiter, eventRepo, _, _, _, _, _, ctrl := setupLoginTest(t)
+	s, userRepo, credRepo, hasher, rateLimiter, eventRepo, _, _, _, _, _, _, ctrl := setupLoginTest(t)
 	defer ctrl.Finish()
 
 	ctx := context.Background()
 	req := &model.LoginRequest{Email: "test@example.com", Password: "wrong"}
-	user := &model.User{ID: "user-1", Email: "test@example.com", IsVerified: true}
+	user := &model.User{ID: "user-1", Email: "test@example.com", IsVerified: true, FailedLoginCount: 4}
 	cred := &model.UserCredential{UserID: "user-1", PasswordHash: "h", PasswordSalt: "s"}
 
 	rateLimiter.EXPECT().Check(ctx, gomock.Any()).Return(redis.RateLimitResult{Allowed: true}, nil).Times(2)
@@ -124,9 +132,9 @@ func TestLogin_WrongPassword_Suspension(t *testing.T) {
 	credRepo.EXPECT().FindByUserID(ctx, user.ID).Return(cred, nil)
 	hasher.EXPECT().Verify(req.Password, cred.PasswordHash, cred.PasswordSalt).Return(false, nil)
 	
-	// Increment failed login and check if it reaches 10
-	userRepo.EXPECT().IncrementFailedLogin(ctx, user.ID).Return(10, nil)
-	userRepo.EXPECT().SuspendUser(ctx, user.ID).Return(nil)
+	// Increment failed login and check if it reaches 5 (the new threshold)
+	userRepo.EXPECT().IncrementFailedLogin(ctx, user.ID).Return(5, nil)
+	userRepo.EXPECT().Suspend(ctx, user.ID).Return(nil)
 	eventRepo.EXPECT().Create(ctx, gomock.Any()).Return(nil)
 
 	_, err := s.Login(ctx, req, "1.1.1.1", "ua")
@@ -136,7 +144,7 @@ func TestLogin_WrongPassword_Suspension(t *testing.T) {
 }
 
 func TestLogin_PartialFailure_DBTimeout(t *testing.T) {
-	s, userRepo, _, _, rateLimiter, _, _, _, _, _, _, ctrl := setupLoginTest(t)
+	s, userRepo, _, _, rateLimiter, _, _, _, _, _, _, _, ctrl := setupLoginTest(t)
 	defer ctrl.Finish()
 
 	ctx := context.Background()
@@ -152,7 +160,7 @@ func TestLogin_PartialFailure_DBTimeout(t *testing.T) {
 }
 
 func TestLogin_AccountSuspended(t *testing.T) {
-	s, userRepo, _, _, rateLimiter, _, _, _, _, _, _, ctrl := setupLoginTest(t)
+	s, userRepo, _, _, rateLimiter, _, _, _, _, _, _, _, ctrl := setupLoginTest(t)
 	defer ctrl.Finish()
 
 	ctx := context.Background()

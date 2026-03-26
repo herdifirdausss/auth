@@ -12,6 +12,7 @@ package mocks
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	redis "github.com/herdifirdausss/auth/internal/infrastructure/redis"
 	gomock "go.uber.org/mock/gomock"
@@ -84,6 +85,21 @@ func (mr *MockSessionCacheMockRecorder) Get(ctx, tokenHash any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockSessionCache)(nil).Get), ctx, tokenHash)
 }
 
+// GetRaw mocks base method.
+func (m *MockSessionCache) GetRaw(ctx context.Context, key string) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRaw", ctx, key)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRaw indicates an expected call of GetRaw.
+func (mr *MockSessionCacheMockRecorder) GetRaw(ctx, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRaw", reflect.TypeOf((*MockSessionCache)(nil).GetRaw), ctx, key)
+}
+
 // Set mocks base method.
 func (m *MockSessionCache) Set(ctx context.Context, tokenHash string, session *redis.CachedSession) error {
 	m.ctrl.T.Helper()
@@ -96,4 +112,18 @@ func (m *MockSessionCache) Set(ctx context.Context, tokenHash string, session *r
 func (mr *MockSessionCacheMockRecorder) Set(ctx, tokenHash, session any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Set", reflect.TypeOf((*MockSessionCache)(nil).Set), ctx, tokenHash, session)
+}
+
+// SetRaw mocks base method.
+func (m *MockSessionCache) SetRaw(ctx context.Context, key, data string, ttl time.Duration) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetRaw", ctx, key, data, ttl)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetRaw indicates an expected call of SetRaw.
+func (mr *MockSessionCacheMockRecorder) SetRaw(ctx, key, data, ttl any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRaw", reflect.TypeOf((*MockSessionCache)(nil).SetRaw), ctx, key, data, ttl)
 }

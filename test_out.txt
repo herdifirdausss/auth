@@ -1,0 +1,34 @@
+=== RUN   TestAuthSecurity_Integration
+=== RUN   TestAuthSecurity_Integration/Full_Lifecycle_Fingerprinting_And_MFA_Skip
+DEBUG: MFAService.Challenge userID: user-1
+2026/03/26 08:21:58 ERROR failed to increment mfa use count error="argument 0 expected [string - mfa-1] does not match actual [string - ]" id=""
+2026/03/26 08:21:58 ERROR MFA challenge failed error="error creating session: call to method Query(), was not expected, next expectation is: ExpectedExec => expecting call to Exec():\n\t- matches sql: '(?s).*UPDATE mfa_methods.*SET use_count = use_count \\+ 1.*'\n\t- is with arguments:\n\t\t0 - mfa-1\n\t- returns result: UPDATE 1\n"
+    auth_security_integration_test.go:161: 
+        	Error Trace:	/Users/oyherdifirdaus/Documents/Project/auth/internal/handler/auth_security_integration_test.go:161
+        	Error:      	Not equal: 
+        	            	expected: 200
+        	            	actual  : 401
+        	Test:       	TestAuthSecurity_Integration/Full_Lifecycle_Fingerprinting_And_MFA_Skip
+        	Messages:   	Challenge failed: {"message":"error creating session: call to method Query(), was not expected, next expectation is: ExpectedExec =\u003e expecting call to Exec():\n\t- matches sql: '(?s).*UPDATE mfa_methods.*SET use_count = use_count \\+ 1.*'\n\t- is with arguments:\n\t\t0 - mfa-1\n\t- returns result: UPDATE 1\n","status":"error"}
+2026/03/26 08:21:58 ERROR login failed error="error finding user by email: call to method Query(), was not expected, next expectation is: ExpectedExec => expecting call to Exec():\n\t- matches sql: '(?s).*UPDATE mfa_methods.*SET use_count = use_count \\+ 1.*'\n\t- is with arguments:\n\t\t0 - mfa-1\n\t- returns result: UPDATE 1\n" email=test@example.com
+    auth_security_integration_test.go:179: 
+        	Error Trace:	/Users/oyherdifirdaus/Documents/Project/auth/internal/handler/auth_security_integration_test.go:179
+        	Error:      	Not equal: 
+        	            	expected: 200
+        	            	actual  : 500
+        	Test:       	TestAuthSecurity_Integration/Full_Lifecycle_Fingerprinting_And_MFA_Skip
+        	Messages:   	Skip-Login failed: {"message":"Internal server error","status":"error"}
+    auth_security_integration_test.go:180: 
+        	Error Trace:	/Users/oyherdifirdaus/Documents/Project/auth/internal/handler/auth_security_integration_test.go:180
+        	Error:      	Received unexpected error:
+        	            	there is a remaining expectation which was not matched: ExpectedExec => expecting call to Exec():
+        	            		- matches sql: '(?s).*UPDATE mfa_methods.*SET use_count = use_count \+ 1.*'
+        	            		- is with arguments:
+        	            			0 - mfa-1
+        	            		- returns result: UPDATE 1
+        	Test:       	TestAuthSecurity_Integration/Full_Lifecycle_Fingerprinting_And_MFA_Skip
+--- FAIL: TestAuthSecurity_Integration (0.13s)
+    --- FAIL: TestAuthSecurity_Integration/Full_Lifecycle_Fingerprinting_And_MFA_Skip (0.13s)
+FAIL
+FAIL	github.com/herdifirdausss/auth/internal/handler	0.783s
+FAIL

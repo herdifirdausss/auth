@@ -17,6 +17,7 @@ type SessionRepository interface {
 	RevokeByID(ctx context.Context, sessionID, reason, revokedBy string) error
 	RevokeAllByUser(ctx context.Context, tx pgx.Tx, userID, reason string) error
 	UpdateActivity(ctx context.Context, sessionID string) error
+	UpdateTokenHash(ctx context.Context, tx pgx.Tx, sessionID, tokenHash string) error
 	CleanupExpired(ctx context.Context) (int64, error)
 }
 
@@ -53,12 +54,12 @@ func (r *PostgresSessionRepository) Create(ctx context.Context, tx pgx.Tx, sessi
 }
 
 func (r *PostgresSessionRepository) FindByID(ctx context.Context, id string) (*model.Session, error) {
-	query := `SELECT id, user_id, tenant_id, token_hash, mfa_verified, expires_at, idle_timeout_at, revoked_at 
+	query := `SELECT id, user_id, tenant_id, token_hash, device_fingerprint, device_name, mfa_verified, expires_at, idle_timeout_at, revoked_at 
 	          FROM sessions WHERE id = $1 AND revoked_at IS NULL AND expires_at > now()`
-
+	
 	var sess model.Session
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&sess.ID, &sess.UserID, &sess.TenantID, &sess.TokenHash,
+		&sess.ID, &sess.UserID, &sess.TenantID, &sess.TokenHash, &sess.DeviceFingerprint, &sess.DeviceName,
 		&sess.MFAVerified, &sess.ExpiresAt, &sess.IdleTimeoutAt, &sess.RevokedAt,
 	)
 	if err != nil {
@@ -71,13 +72,13 @@ func (r *PostgresSessionRepository) FindByID(ctx context.Context, id string) (*m
 }
 
 func (r *PostgresSessionRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*model.Session, error) {
-	query := `SELECT id, user_id, tenant_id, membership_id, token_hash, mfa_verified, expires_at, idle_timeout_at 
+	query := `SELECT id, user_id, tenant_id, membership_id, token_hash, device_fingerprint, device_name, mfa_verified, expires_at, idle_timeout_at 
 	          FROM sessions WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`
-
+	
 	var sess model.Session
 	err := r.db.QueryRow(ctx, query, tokenHash).Scan(
 		&sess.ID, &sess.UserID, &sess.TenantID, &sess.MembershipID, &sess.TokenHash,
-		&sess.MFAVerified, &sess.ExpiresAt, &sess.IdleTimeoutAt,
+		&sess.DeviceFingerprint, &sess.DeviceName, &sess.MFAVerified, &sess.ExpiresAt, &sess.IdleTimeoutAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -120,6 +121,17 @@ func (r *PostgresSessionRepository) UpdateActivity(ctx context.Context, sessionI
 	query := `UPDATE sessions SET last_activity_at = now(), idle_timeout_at = now() + interval '30 minutes', updated_at = now() 
 	          WHERE id = $1`
 	_, err := r.db.Exec(ctx, query, sessionID)
+	return err
+}
+
+func (r *PostgresSessionRepository) UpdateTokenHash(ctx context.Context, tx pgx.Tx, sessionID, tokenHash string) error {
+	query := `UPDATE sessions SET token_hash = $2, updated_at = now() WHERE id = $1`
+	var err error
+	if tx != nil {
+		_, err = tx.Exec(ctx, query, sessionID, tokenHash)
+	} else {
+		_, err = r.db.Exec(ctx, query, sessionID, tokenHash)
+	}
 	return err
 }
 
@@ -168,12 +180,12 @@ func (r *PostgresRefreshTokenRepository) Create(ctx context.Context, tx pgx.Tx, 
 
 func (r *PostgresRefreshTokenRepository) FindByTokenHash(ctx context.Context, tokenHash string) (*model.RefreshToken, error) {
 	query := `SELECT id, session_id, user_id, token_hash, family_id, generation, parent_token_id, 
-	          revoked_at, used_at, expires_at FROM refresh_tokens WHERE token_hash = $1`
+	          device_fingerprint, revoked_at, used_at, expires_at FROM refresh_tokens WHERE token_hash = $1`
 
 	var t model.RefreshToken
 	err := r.db.QueryRow(ctx, query, tokenHash).Scan(
 		&t.ID, &t.SessionID, &t.UserID, &t.TokenHash, &t.FamilyID, &t.Generation, &t.ParentTokenID,
-		&t.RevokedAt, &t.UsedAt, &t.ExpiresAt,
+		&t.DeviceFingerprint, &t.RevokedAt, &t.UsedAt, &t.ExpiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

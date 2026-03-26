@@ -1,0 +1,8 @@
+time=2026-03-26T07:51:26.957+07:00 level=INFO msg="Postgres pool initialized" host=localhost max_conns=8 min_conns=0 total_conns=1
+time=2026-03-26T07:51:26.977+07:00 level=INFO msg="Redis client initialized" addr=localhost:6379 db=0 pool_size=80
+time=2026-03-26T07:51:26.977+07:00 level=INFO msg="Infrastructure initialized successfully" env=development
+time=2026-03-26T07:51:26.977+07:00 level=INFO msg="Cleanup manager started" interval=1h0m0s
+time=2026-03-26T07:51:26.977+07:00 level=INFO msg="Starting background cleanup"
+time=2026-03-26T07:51:26.977+07:00 level=INFO msg="Starting server" addr=:8080
+time=2026-03-26T07:51:26.977+07:00 level=ERROR msg="Server failed" error="listen tcp :8080: bind: address already in use"
+exit status 1

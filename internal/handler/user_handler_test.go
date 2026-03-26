@@ -38,9 +38,9 @@ func TestUserHandler_Me(t *testing.T) {
 		assert.Equal(t, "success", resp["status"])
 
 		data := resp["data"].(map[string]interface{})
-		assert.Equal(t, "user-123", data["UserID"])
-		assert.Equal(t, "tenant-456", data["TenantID"])
-		assert.Equal(t, true, data["MFAVerified"])
+		assert.Equal(t, "user-123", data["user_id"])
+		assert.Equal(t, "tenant-456", data["tenant_id"])
+		assert.Equal(t, true, data["mfa_verified"])
 	})
 
 	t.Run("Unauthorized_MissingContext", func(t *testing.T) {

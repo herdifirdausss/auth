@@ -110,6 +110,7 @@ CREATE TABLE password_history (
   id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   password_hash text       NOT NULL,
+  password_salt text NOT NULL DEFAULT '',
   created_at   timestamptz NOT NULL DEFAULT now()
 );
 
@@ -316,6 +317,7 @@ CREATE TABLE security_tokens (
   email        text,
   ip_address   inet,
   metadata     jsonb       NOT NULL DEFAULT '{}',
+  user_agent text,
 
   expires_at   timestamptz NOT NULL,
   used_at      timestamptz,
@@ -421,6 +423,7 @@ CREATE TABLE security_events (
   user_agent         text,
   device_fingerprint text,
   metadata           jsonb       NOT NULL DEFAULT '{}',
+  details text DEFAULT '',
 
   created_at         timestamptz NOT NULL DEFAULT now(),
 

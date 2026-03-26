@@ -41,6 +41,64 @@ func (m *MockRoleRepository) EXPECT() *MockRoleRepositoryMockRecorder {
 	return m.recorder
 }
 
+// Create mocks base method.
+func (m *MockRoleRepository) Create(ctx context.Context, role *model.Role) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, role)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockRoleRepositoryMockRecorder) Create(ctx, role any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockRoleRepository)(nil).Create), ctx, role)
+}
+
+// Delete mocks base method.
+func (m *MockRoleRepository) Delete(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockRoleRepositoryMockRecorder) Delete(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockRoleRepository)(nil).Delete), ctx, id)
+}
+
+// FindByID mocks base method.
+func (m *MockRoleRepository) FindByID(ctx context.Context, id string) (*model.Role, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByID", ctx, id)
+	ret0, _ := ret[0].(*model.Role)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByID indicates an expected call of FindByID.
+func (mr *MockRoleRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockRoleRepository)(nil).FindByID), ctx, id)
+}
+
+// FindByName mocks base method.
+func (m *MockRoleRepository) FindByName(ctx context.Context, tenantID *string, name string) (*model.Role, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByName", ctx, tenantID, name)
+	ret0, _ := ret[0].(*model.Role)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByName indicates an expected call of FindByName.
+func (mr *MockRoleRepositoryMockRecorder) FindByName(ctx, tenantID, name any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByName", reflect.TypeOf((*MockRoleRepository)(nil).FindByName), ctx, tenantID, name)
+}
+
 // FindPermissionsByUserAndTenant mocks base method.
 func (m *MockRoleRepository) FindPermissionsByUserAndTenant(ctx context.Context, userID, tenantID string) ([]string, error) {
 	m.ctrl.T.Helper()
@@ -69,4 +127,63 @@ func (m *MockRoleRepository) FindRolesByMembership(ctx context.Context, membersh
 func (mr *MockRoleRepositoryMockRecorder) FindRolesByMembership(ctx, membershipID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindRolesByMembership", reflect.TypeOf((*MockRoleRepository)(nil).FindRolesByMembership), ctx, membershipID)
+}
+
+// FindRolesByUserAndTenant mocks base method.
+func (m *MockRoleRepository) FindRolesByUserAndTenant(ctx context.Context, userID, tenantID string) ([]model.Role, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindRolesByUserAndTenant", ctx, userID, tenantID)
+	ret0, _ := ret[0].([]model.Role)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindRolesByUserAndTenant indicates an expected call of FindRolesByUserAndTenant.
+func (mr *MockRoleRepositoryMockRecorder) FindRolesByUserAndTenant(ctx, userID, tenantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindRolesByUserAndTenant", reflect.TypeOf((*MockRoleRepository)(nil).FindRolesByUserAndTenant), ctx, userID, tenantID)
+}
+
+// GetDefaults mocks base method.
+func (m *MockRoleRepository) GetDefaults(ctx context.Context) ([]model.Role, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDefaults", ctx)
+	ret0, _ := ret[0].([]model.Role)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDefaults indicates an expected call of GetDefaults.
+func (mr *MockRoleRepositoryMockRecorder) GetDefaults(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDefaults", reflect.TypeOf((*MockRoleRepository)(nil).GetDefaults), ctx)
+}
+
+// ListByTenant mocks base method.
+func (m *MockRoleRepository) ListByTenant(ctx context.Context, tenantID string) ([]model.Role, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListByTenant", ctx, tenantID)
+	ret0, _ := ret[0].([]model.Role)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListByTenant indicates an expected call of ListByTenant.
+func (mr *MockRoleRepositoryMockRecorder) ListByTenant(ctx, tenantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByTenant", reflect.TypeOf((*MockRoleRepository)(nil).ListByTenant), ctx, tenantID)
+}
+
+// Update mocks base method.
+func (m *MockRoleRepository) Update(ctx context.Context, role *model.Role) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Update", ctx, role)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Update indicates an expected call of Update.
+func (mr *MockRoleRepositoryMockRecorder) Update(ctx, role any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Update", reflect.TypeOf((*MockRoleRepository)(nil).Update), ctx, role)
 }

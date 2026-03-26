@@ -41,18 +41,32 @@ func (m *MockAuthService) EXPECT() *MockAuthServiceMockRecorder {
 	return m.recorder
 }
 
-// ForgotPassword mocks base method.
-func (m *MockAuthService) ForgotPassword(ctx context.Context, email, ip, ua string) error {
+// DeleteAccount mocks base method.
+func (m *MockAuthService) DeleteAccount(ctx context.Context, userID, ip, userAgent string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForgotPassword", ctx, email, ip, ua)
+	ret := m.ctrl.Call(m, "DeleteAccount", ctx, userID, ip, userAgent)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteAccount indicates an expected call of DeleteAccount.
+func (mr *MockAuthServiceMockRecorder) DeleteAccount(ctx, userID, ip, userAgent any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteAccount", reflect.TypeOf((*MockAuthService)(nil).DeleteAccount), ctx, userID, ip, userAgent)
+}
+
+// ForgotPassword mocks base method.
+func (m *MockAuthService) ForgotPassword(ctx context.Context, email, ip, userAgent string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForgotPassword", ctx, email, ip, userAgent)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ForgotPassword indicates an expected call of ForgotPassword.
-func (mr *MockAuthServiceMockRecorder) ForgotPassword(ctx, email, ip, ua any) *gomock.Call {
+func (mr *MockAuthServiceMockRecorder) ForgotPassword(ctx, email, ip, userAgent any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForgotPassword", reflect.TypeOf((*MockAuthService)(nil).ForgotPassword), ctx, email, ip, ua)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForgotPassword", reflect.TypeOf((*MockAuthService)(nil).ForgotPassword), ctx, email, ip, userAgent)
 }
 
 // Login mocks base method.
@@ -99,18 +113,18 @@ func (mr *MockAuthServiceMockRecorder) LogoutAll(ctx, userID any) *gomock.Call {
 }
 
 // RefreshToken mocks base method.
-func (m *MockAuthService) RefreshToken(ctx context.Context, rawRefresh, ip, userAgent string) (*model.LoginResponse, error) {
+func (m *MockAuthService) RefreshToken(ctx context.Context, req *model.RefreshTokenRequest, ip, userAgent string) (*model.LoginResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RefreshToken", ctx, rawRefresh, ip, userAgent)
+	ret := m.ctrl.Call(m, "RefreshToken", ctx, req, ip, userAgent)
 	ret0, _ := ret[0].(*model.LoginResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // RefreshToken indicates an expected call of RefreshToken.
-func (mr *MockAuthServiceMockRecorder) RefreshToken(ctx, rawRefresh, ip, userAgent any) *gomock.Call {
+func (mr *MockAuthServiceMockRecorder) RefreshToken(ctx, req, ip, userAgent any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockAuthService)(nil).RefreshToken), ctx, rawRefresh, ip, userAgent)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshToken", reflect.TypeOf((*MockAuthService)(nil).RefreshToken), ctx, req, ip, userAgent)
 }
 
 // Register mocks base method.
@@ -129,17 +143,32 @@ func (mr *MockAuthServiceMockRecorder) Register(ctx, req, ipAddress, userAgent a
 }
 
 // ResetPassword mocks base method.
-func (m *MockAuthService) ResetPassword(ctx context.Context, token, newPassword, ip, ua string) error {
+func (m *MockAuthService) ResetPassword(ctx context.Context, token, newPassword, ip, userAgent string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ResetPassword", ctx, token, newPassword, ip, ua)
+	ret := m.ctrl.Call(m, "ResetPassword", ctx, token, newPassword, ip, userAgent)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ResetPassword indicates an expected call of ResetPassword.
-func (mr *MockAuthServiceMockRecorder) ResetPassword(ctx, token, newPassword, ip, ua any) *gomock.Call {
+func (mr *MockAuthServiceMockRecorder) ResetPassword(ctx, token, newPassword, ip, userAgent any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetPassword", reflect.TypeOf((*MockAuthService)(nil).ResetPassword), ctx, token, newPassword, ip, ua)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetPassword", reflect.TypeOf((*MockAuthService)(nil).ResetPassword), ctx, token, newPassword, ip, userAgent)
+}
+
+// ValidateSession mocks base method.
+func (m *MockAuthService) ValidateSession(ctx context.Context, sessionID string) (*model.Session, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateSession", ctx, sessionID)
+	ret0, _ := ret[0].(*model.Session)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateSession indicates an expected call of ValidateSession.
+func (mr *MockAuthServiceMockRecorder) ValidateSession(ctx, sessionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateSession", reflect.TypeOf((*MockAuthService)(nil).ValidateSession), ctx, sessionID)
 }
 
 // VerifyEmail mocks base method.

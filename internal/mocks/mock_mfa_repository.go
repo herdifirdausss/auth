@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	model "github.com/herdifirdausss/auth/internal/model"
+	pgx "github.com/jackc/pgx/v5"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -42,17 +43,17 @@ func (m *MockMFARepository) EXPECT() *MockMFARepositoryMockRecorder {
 }
 
 // Activate mocks base method.
-func (m *MockMFARepository) Activate(ctx context.Context, id string) error {
+func (m *MockMFARepository) Activate(ctx context.Context, tx pgx.Tx, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Activate", ctx, id)
+	ret := m.ctrl.Call(m, "Activate", ctx, tx, id)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Activate indicates an expected call of Activate.
-func (mr *MockMFARepositoryMockRecorder) Activate(ctx, id any) *gomock.Call {
+func (mr *MockMFARepositoryMockRecorder) Activate(ctx, tx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Activate", reflect.TypeOf((*MockMFARepository)(nil).Activate), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Activate", reflect.TypeOf((*MockMFARepository)(nil).Activate), ctx, tx, id)
 }
 
 // Create mocks base method.
@@ -81,6 +82,21 @@ func (m *MockMFARepository) DeactivateAll(ctx context.Context, userID string) er
 func (mr *MockMFARepositoryMockRecorder) DeactivateAll(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeactivateAll", reflect.TypeOf((*MockMFARepository)(nil).DeactivateAll), ctx, userID)
+}
+
+// FindAllByUserIDAndType mocks base method.
+func (m *MockMFARepository) FindAllByUserIDAndType(ctx context.Context, userID, methodType string) ([]*model.MFAMethod, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAllByUserIDAndType", ctx, userID, methodType)
+	ret0, _ := ret[0].([]*model.MFAMethod)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAllByUserIDAndType indicates an expected call of FindAllByUserIDAndType.
+func (mr *MockMFARepositoryMockRecorder) FindAllByUserIDAndType(ctx, userID, methodType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAllByUserIDAndType", reflect.TypeOf((*MockMFARepository)(nil).FindAllByUserIDAndType), ctx, userID, methodType)
 }
 
 // FindInactiveByUser mocks base method.
@@ -113,16 +129,30 @@ func (mr *MockMFARepositoryMockRecorder) FindPrimaryActive(ctx, userID any) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindPrimaryActive", reflect.TypeOf((*MockMFARepository)(nil).FindPrimaryActive), ctx, userID)
 }
 
-// SetBackupCodes mocks base method.
-func (m *MockMFARepository) SetBackupCodes(ctx context.Context, id, encrypted string) error {
+// IncrementUseCount mocks base method.
+func (m *MockMFARepository) IncrementUseCount(ctx context.Context, tx pgx.Tx, id string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetBackupCodes", ctx, id, encrypted)
+	ret := m.ctrl.Call(m, "IncrementUseCount", ctx, tx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// IncrementUseCount indicates an expected call of IncrementUseCount.
+func (mr *MockMFARepositoryMockRecorder) IncrementUseCount(ctx, tx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncrementUseCount", reflect.TypeOf((*MockMFARepository)(nil).IncrementUseCount), ctx, tx, id)
+}
+
+// SetBackupCodes mocks base method.
+func (m *MockMFARepository) SetBackupCodes(ctx context.Context, tx pgx.Tx, id, encrypted string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetBackupCodes", ctx, tx, id, encrypted)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SetBackupCodes indicates an expected call of SetBackupCodes.
-func (mr *MockMFARepositoryMockRecorder) SetBackupCodes(ctx, id, encrypted any) *gomock.Call {
+func (mr *MockMFARepositoryMockRecorder) SetBackupCodes(ctx, tx, id, encrypted any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBackupCodes", reflect.TypeOf((*MockMFARepository)(nil).SetBackupCodes), ctx, id, encrypted)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetBackupCodes", reflect.TypeOf((*MockMFARepository)(nil).SetBackupCodes), ctx, tx, id, encrypted)
 }
